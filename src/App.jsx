@@ -462,13 +462,13 @@ function App() {
       rowsToSend.push([
         timestamp, newOrderNumber, customerName, address,
         item.ItemName + qtyText, 'ทานที่ร้าน', price,
-        checkoutTotal, 'Pending', timestamp, ''
+        checkoutTotal, 'Completed', timestamp, timestamp
       ]);
       if (item.Options) {
         rowsToSend.push([
           timestamp, newOrderNumber, customerName, address,
           `↳ ${item.Options}`, 'ทานที่ร้าน', 0,
-          checkoutTotal, 'Pending', timestamp, ''
+          checkoutTotal, 'Completed', timestamp, timestamp
         ]);
       }
     });
@@ -479,7 +479,7 @@ function App() {
       customerDetails: { name: customerName, address },
       items: checkoutItems.map(i => ({ isFlattened: true, name: i.ItemName, dining: 'ทานที่ร้าน' })),
       total: checkoutTotal,
-      status: 'pending',
+      status: 'completed',
       timestamp
     };
 
