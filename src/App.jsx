@@ -624,7 +624,7 @@ function App() {
         <Route path="/index" element={
           !tableNumber ? <Navigate to="/table-select" replace /> :
             <>
-              <header className="app-header sticky-header">
+              <header className="app-header sticky-header" style={{ margin: '0 0 1rem 0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', marginBottom: '1rem' }}>
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     <h1 style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: 0 }}>
