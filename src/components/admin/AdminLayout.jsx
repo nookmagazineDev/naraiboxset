@@ -11,7 +11,7 @@ const AdminLayout = ({ lang, setLang }) => {
        <aside className="admin-sidebar">
           <div className="admin-logo">
              <h2>👑 {lang === 'th' ? 'แผงควบคุม' : 'Admin Panel'}</h2>
-             <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Kra Pao 10 Na</p>
+             <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{lang === 'th' ? 'เสน่ห์' : 'SA-NAE'}</p>
           </div>
           <nav className="admin-nav">
              <NavLink to="/admin" end className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
