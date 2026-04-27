@@ -19,25 +19,17 @@ const ManageMenu = () => {
   }, []);
 
   const fetchMenu = async () => {
-    const cached = localStorage.getItem('gas_all_data');
-    if (cached) {
-      try {
-        const data = JSON.parse(cached);
-        if (data.menu) setMenuItems(data.menu);
-        if (data.categories) setCategories(data.categories);
-        setLoading(false);
-      } catch(e) {}
-    } else {
-      setLoading(true);
-    }
+    // Clear stale cache first so fresh data always wins
+    localStorage.removeItem('gas_all_data');
+    setLoading(true);
 
     try {
       const resp = await fetch(GAS_URL + '?action=getAllData');
       const data = await resp.json();
       if (data) {
         localStorage.setItem('gas_all_data', JSON.stringify(data));
-        if (data.menu) setMenuItems(data.menu);
-        if (data.categories) setCategories(data.categories);
+        setMenuItems(Array.isArray(data.menu) ? data.menu : []);
+        setCategories(Array.isArray(data.categories) ? data.categories : []);
       }
     } catch(e) {
       console.error('Failed to fetch menu:', e);

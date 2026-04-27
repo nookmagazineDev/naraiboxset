@@ -55,7 +55,7 @@ function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   const processAppGASData = (data) => {
-    if (data.categories && Array.isArray(data.categories) && data.categories.length > 0) {
+    if (data.categories && Array.isArray(data.categories)) {
       setAllCategories(data.categories);
       setCategories(data.categories.filter(c => c.isActive !== false));
     }
@@ -97,7 +97,7 @@ function App() {
       });
       setMaxOrderNum(prev => Math.max(prev, currentMax));
     }
-    if (data.menu && Array.isArray(data.menu) && data.menu.length > 0) {
+    if (data.menu && Array.isArray(data.menu)) {
       setAllMenu(data.menu);
       setLiveMenu(data.menu.filter(m => m.isActive !== false));
     }
@@ -107,13 +107,7 @@ function App() {
   };
 
   const fetchOrdersFromSheet = async () => {
-    const cached = localStorage.getItem('gas_all_data');
-    if (cached) {
-      try {
-        const data = JSON.parse(cached);
-        if (data) processAppGASData(data);
-      } catch (e) { }
-    }
+    // Always fetch fresh from GAS — don't pre-load stale cache
     try {
       const resp = await fetch(GAS_URL + '?action=getAllData');
       const data = await resp.json();
