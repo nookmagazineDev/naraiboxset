@@ -368,6 +368,32 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({"success": true})).setMimeType(ContentService.MimeType.JSON);
   }
   
+  // ==========================================
+  // RESET / CLEAR ALL DATA (เคลียร์ข้อมูลเก่า)
+  // ==========================================
+  if (action === 'resetAllSheetData') {
+    // Clear Categories (keep header only)
+    var catSheet = ss.getSheetByName('Categories');
+    if (catSheet && catSheet.getLastRow() > 1) {
+      catSheet.deleteRows(2, catSheet.getLastRow() - 1);
+    }
+
+    // Clear Menu (keep header only)
+    var menuSheet = ss.getSheetByName('Menu');
+    if (menuSheet && menuSheet.getLastRow() > 1) {
+      menuSheet.deleteRows(2, menuSheet.getLastRow() - 1);
+    }
+
+    // Clear Promotions (keep header only)
+    var promoSheet = ss.getSheetByName('Promotions');
+    if (promoSheet && promoSheet.getLastRow() > 1) {
+      promoSheet.deleteRows(2, promoSheet.getLastRow() - 1);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ success: true, message: 'All data cleared' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   return ContentService.createTextOutput(JSON.stringify({"success": false, "error": "Unknown action"}))
       .setMimeType(ContentService.MimeType.JSON);
 }
