@@ -117,7 +117,7 @@ function App() {
     else localStorage.removeItem('table_number');
   }, [tableNumber]);
 
-  const GAS_URL = 'https://script.google.com/macros/s/AKfycbxwR7-oivm8zdCbUtgznjoafFyfJg09TM_Iy3s8pPcOROLcsvn0CkvHt3XoH7mlU9Z-Hw/exec ';
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbxwR7-oivm8zdCbUtgznjoafFyfJg09TM_Iy3s8pPcOROLcsvn0CkvHt3XoH7mlU9Z-Hw/exec';
 
   const [orders, setOrders] = useState([]);
   const [maxOrderNum, setMaxOrderNum] = useState(0);
