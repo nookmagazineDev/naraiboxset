@@ -19,35 +19,17 @@ const ManageCategories = () => {
   }, []);
 
   const fetchCategories = async () => {
-    const cached = localStorage.getItem('gas_all_data');
-    if (cached) {
-      try {
-        const data = JSON.parse(cached);
-        if (data && data.categories && data.categories.length > 0) {
-          setCategories(data.categories);
-        }
-        if (data && data.menu) {
-          setMenuList(data.menu);
-        }
-        setLoading(false);
-      } catch(e) {}
-    } else {
-      setLoading(true);
-    }
+    // Clear stale cache first so fresh data always wins
+    localStorage.removeItem('gas_all_data');
+    setLoading(true);
 
     try {
       const resp = await fetch(GAS_URL + '?action=getAllData');
       const data = await resp.json();
-      if (data && data.categories && data.categories.length > 0) {
+      if (data) {
         localStorage.setItem('gas_all_data', JSON.stringify(data));
-        setCategories(data.categories);
-        if (data.menu) setMenuList(data.menu);
-      } else if (!cached) {
-        setCategories([
-          { slug: 'food', name: 'อาหารหลัก', nameEn: 'Main Dishes', icon: '🍲' },
-          { slug: 'drink', name: 'เครื่องดื่ม', nameEn: 'Drinks', icon: '🥤' }
-        ]);
-        if (data && data.menu) setMenuList(data.menu);
+        setCategories(Array.isArray(data.categories) ? data.categories : []);
+        setMenuList(Array.isArray(data.menu) ? data.menu : []);
       }
     } catch(e) {
       console.error('Failed to fetch categories:', e);
