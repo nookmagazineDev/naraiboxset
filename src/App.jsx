@@ -52,7 +52,7 @@ function App() {
     else localStorage.removeItem('table_number');
   }, [tableNumber]);
 
-  const GAS_URL = 'https://script.google.com/macros/s/AKfycbxwR7-oivm8zdCbUtgznjoafFyfJg09TM_Iy3s8pPcOROLcsvn0CkvHt3XoH7mlU9Z-Hw/exec';
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
 
   const [orders, setOrders] = useState([]);
   const [maxOrderNum, setMaxOrderNum] = useState(0);
@@ -385,7 +385,7 @@ function App() {
     setMaxOrderNum(nextNum);
     const newOrderNumber = `#${String(nextNum).padStart(3, '0')}`;
     const timestamp = getThaiTimeISO();
-    
+
     const count = localStorage.getItem('customer_count_' + tableNumber) || '';
     const countText = count ? ` (${count} ท่าน)` : '';
     const customerName = tableNumber ? `โต๊ะ ${tableNumber}${countText}` : 'ไม่ระบุ';
@@ -477,7 +477,7 @@ function App() {
       }
       return o;
     }));
-    
+
     // Move customer count
     const count = localStorage.getItem('customer_count_' + fromTable);
     if (count) {
@@ -492,7 +492,7 @@ function App() {
 
     setTableNumber(toTable);
     navigate('/table-orders');
-    
+
     try {
       await fetch(GAS_URL, {
         method: 'POST',
@@ -578,11 +578,11 @@ function App() {
   if (!currentUser) {
     // If path is /kitchen, allow it? Optional. Let's just require login for everything.
     return (
-      <LoginScreen 
-        users={users} 
-        onLogin={handleLogin} 
-        lang={lang} 
-        isOfflineMode={users.length === 0} 
+      <LoginScreen
+        users={users}
+        onLogin={handleLogin}
+        lang={lang}
+        isOfflineMode={users.length === 0}
       />
     );
   }
