@@ -12,7 +12,6 @@ import ManageMenu from './components/admin/ManageMenu';
 import ManagePromotions from './components/admin/ManagePromotions';
 import ManageCategories from './components/admin/ManageCategories';
 import ManagePrinters from './components/admin/ManagePrinters';
-import HeroCarousel from './components/HeroCarousel';
 import TableSelection from './components/TableSelection';
 import TableOrderView from './components/TableOrderView';
 import './index.css';
@@ -704,10 +703,6 @@ function App() {
                   </button>
                 </div>
               </header>
-
-              <div style={{ marginBottom: '1.5rem' }}>
-                <HeroCarousel />
-              </div>
 
               <div className="menu-container">
                 {categories.filter(cat => liveMenu.some(i => (i.category || 'food') === cat.slug)).map((cat, index, arr) => (
