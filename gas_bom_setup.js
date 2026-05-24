@@ -459,15 +459,114 @@ function recordStockIn(data) {
   return { success: true, recorded: rows.length };
 }
 
-// ──────────────────────────────────────────────
-// doGet และ doPost — ต่อยอดจาก GAS หลัก
-// คัดลอกส่วนนี้ไปแทรกใน doGet/doPost เดิม
-// ──────────────────────────────────────────────
-/*
-  ใน doGet เพิ่ม:
-  if (action === 'getStock')    return jsonResponse(getStockLevels());
+/**
+ * ดึงรายการวัตถุดิบทั้งหมดจากชีท "วัตถุดิบ"
+ * เรียกผ่าน doGet?action=getIngredients
+ */
+function getIngredientsList() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sh = ss.getSheetByName('วัตถุดิบ');
+  if (!sh) return { success: false, error: 'ไม่พบชีท วัตถุดิบ — กรุณารัน setupBOM() ก่อน' };
 
-  ใน doPost เพิ่ม:
-  if (data.action === 'deductStock') return jsonResponse(deductStock(data));
-  if (data.action === 'stockIn')     return jsonResponse(recordStockIn(data));
+  const rows = sh.getDataRange().getValues().slice(1); // ข้ามหัวตาราง
+  const ingredients = rows
+    .filter(r => r[0]) // กรองแถวที่มีรหัส
+    .map(r => ({
+      id:          String(r[0]),
+      name:        r[1]  || '',
+      nameEn:      r[2]  || '',
+      unit:        r[3]  || '',
+      minStock:    Number(r[4]) || 0,
+      costPerUnit: Number(r[5]) || 0,
+      category:    r[6]  || '',
+      note:        r[7]  || ''
+    }));
+
+  return { success: true, ingredients };
+}
+
+/**
+ * บันทึก BOM จาก ManageBOM page (Sync ไปยัง GAS)
+ * Body: {
+ *   action: 'saveBOM',
+ *   rows: [{ menuId, menuName, menuNameEn, ingId, ingName, qty, unit, costPerUnit }]
+ * }
+ */
+function saveBOM(data) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sh = ss.getSheetByName('BOM');
+  if (!sh) return { success: false, error: 'ไม่พบชีท BOM — กรุณารัน setupBOM() ก่อน' };
+
+  // ลบข้อมูลเก่า (ยกเว้น header row 1)
+  const lastRow = sh.getLastRow();
+  if (lastRow > 1) {
+    sh.getRange(2, 1, lastRow - 1, sh.getLastColumn()).clearContent();
+  }
+
+  if (!data.rows || data.rows.length === 0) {
+    return { success: true, saved: 0 };
+  }
+
+  const values = data.rows.map(r => [
+    r.menuId     || '',
+    r.menuName   || '',
+    r.menuNameEn || '',
+    r.ingId      || '',
+    r.ingName    || '',
+    Number(r.qty)         || 0,
+    r.unit       || '',
+    Number(r.costPerUnit) || 0,
+    r.note       || ''
+  ]);
+
+  sh.getRange(2, 1, values.length, 9).setValues(values);
+  sh.getRange(2, 6, values.length, 1).setNumberFormat('#,##0.##');
+  sh.getRange(2, 8, values.length, 1).setNumberFormat('฿#,##0.00');
+
+  return { success: true, saved: values.length };
+}
+
+// ================================================================
+// INTEGRATION GUIDE
+// วิธีเพิ่ม BOM actions เข้า doGet / doPost ที่มีอยู่แล้ว
+// ================================================================
+/*
+─── ขั้นตอน ───────────────────────────────────────────────────────
+1. Copy ฟังก์ชันทั้งหมดในไฟล์นี้ไปวางใน GAS editor (ต่อท้าย script เดิม)
+2. แก้ไข doGet ที่มีอยู่แล้ว เพิ่ม 2 บรรทัดนี้ก่อน return Unknown:
+
+  function doGet(e) {
+    const action = e.parameter.action;
+    // ... โค้ดเดิม (getAllData ฯลฯ) ...
+
+    // ── เพิ่มตรงนี้ ──
+    if (action === 'getStock')       return _json(getStockLevels());
+    if (action === 'getIngredients') return _json(getIngredientsList());
+
+    return _json({ error: 'Unknown GET action' });
+  }
+
+3. แก้ไข doPost ที่มีอยู่แล้ว เพิ่ม 3 บรรทัดนี้:
+
+  function doPost(e) {
+    const data = JSON.parse(e.postData.contents);
+    // ... โค้ดเดิม ...
+
+    // ── เพิ่มตรงนี้ ──
+    if (data.action === 'deductStock') return _json(deductStock(data));
+    if (data.action === 'stockIn')     return _json(recordStockIn(data));
+    if (data.action === 'saveBOM')     return _json(saveBOM(data));
+  }
+
+4. เพิ่ม helper _json() ถ้ายังไม่มี:
+
+  function _json(obj) {
+    return ContentService
+      .createTextOutput(JSON.stringify(obj))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+5. รัน setupBOM() ครั้งเดียวเพื่อสร้าง 5 ชีท
+6. Deploy → Manage Deployments → Edit (Update) → Deploy
+───────────────────────────────────────────────────────────────────
 */
