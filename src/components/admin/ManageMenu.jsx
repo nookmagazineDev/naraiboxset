@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Printer } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Printer, FlaskConical, ChevronRight } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxwR7-oivm8zdCbUtgznjoafFyfJg09TM_Iy3s8pPcOROLcsvn0CkvHt3XoH7mlU9Z-Hw/exec';
@@ -15,9 +15,16 @@ const ManageMenu = () => {
   const [uploading, setUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // BOM state
+  const [bomConfig, setBomConfig] = useState({});
+  const [ingredients, setIngredients] = useState([]);
+  const [editingBom, setEditingBom] = useState([]); // BOM rows for current editing item
+  const [showBom, setShowBom] = useState(false);
+
   useEffect(() => {
     fetchMenu();
     loadPrinters();
+    loadBomData();
     const handler = () => loadPrinters();
     window.addEventListener('printers_changed', handler);
     return () => window.removeEventListener('printers_changed', handler);
@@ -29,6 +36,38 @@ const ManageMenu = () => {
       setPrinters(stored ? JSON.parse(stored) : []);
     } catch (e) { setPrinters([]); }
   };
+
+  const loadBomData = () => {
+    try {
+      const bom = localStorage.getItem('bom_config');
+      setBomConfig(bom ? JSON.parse(bom) : {});
+    } catch(e) { setBomConfig({}); }
+    try {
+      const ing = localStorage.getItem('bom_ingredients');
+      setIngredients(ing ? JSON.parse(ing) : []);
+    } catch(e) { setIngredients([]); }
+  };
+
+  // BOM row helpers (for editingBom)
+  const updateBomRow = (index, field, value) => {
+    const rows = [...editingBom];
+    rows[index] = { ...rows[index], [field]: value };
+    if (field === 'ingId' && value) {
+      const ing = ingredients.find(i => i.id === value);
+      if (ing) {
+        rows[index].ingName     = ing.name;
+        rows[index].unit        = rows[index].unit || ing.unit || '';
+        rows[index].costPerUnit = rows[index].costPerUnit !== undefined && rows[index].costPerUnit !== ''
+          ? rows[index].costPerUnit : (ing.costPerUnit ?? ing.pricePerUnit ?? 0);
+      }
+    }
+    setEditingBom(rows);
+  };
+
+  const addBomRow = () => setEditingBom(prev => [...prev, { ingId: '', ingName: '', qty: '', unit: '', costPerUnit: '' }]);
+  const removeBomRow = (index) => setEditingBom(prev => prev.filter((_, i) => i !== index));
+
+  const bomTotalCost = editingBom.reduce((s, r) => s + (parseFloat(r.qty) || 0) * (parseFloat(r.costPerUnit) || 0), 0);
 
   const fetchMenu = async () => {
     // Clear stale cache first so fresh data always wins
@@ -109,6 +148,8 @@ const ManageMenu = () => {
 
   const handleEdit = (item) => {
     setEditingItem(item);
+    setEditingBom(bomConfig[String(item.id)] || []);
+    setShowBom(false);
     setIsModalOpen(true);
   };
 
@@ -126,6 +167,8 @@ const ManageMenu = () => {
       bundledItems: [],
       printerId: ''
     });
+    setEditingBom([]);
+    setShowBom(false);
     setIsModalOpen(true);
   };
 
@@ -137,7 +180,7 @@ const ManageMenu = () => {
     } else {
       updated = [...menuItems, editingItem];
     }
-    
+
     try {
       await fetch(GAS_URL, {
         method: 'POST',
@@ -150,6 +193,11 @@ const ManageMenu = () => {
       });
       setMenuItems(updated);
       setIsModalOpen(false);
+
+      // Save BOM to localStorage
+      const newBomConfig = { ...bomConfig, [String(editingItem.id)]: editingBom };
+      setBomConfig(newBomConfig);
+      localStorage.setItem('bom_config', JSON.stringify(newBomConfig));
 
       const cached = localStorage.getItem('gas_all_data');
       if (cached) {
@@ -464,6 +512,106 @@ const ManageMenu = () => {
                     </div>
                   )})}
                 </div>
+              </div>
+
+              {/* ── BOM / สูตรวัตถุดิบ ──────────────────────────────── */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowBom(v => !v)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                    background: 'none', border: 'none', color: 'white', cursor: 'pointer',
+                    fontWeight: 600, fontSize: '0.9rem', padding: 0, marginBottom: showBom ? '1rem' : 0,
+                    width: '100%', textAlign: 'left'
+                  }}
+                >
+                  <FlaskConical size={16} style={{ color: 'var(--accent)' }} />
+                  {lang === 'th' ? 'สูตรวัตถุดิบ (BOM)' : 'Bill of Materials (BOM)'}
+                  {editingBom.length > 0 && (
+                    <span style={{ background: 'rgba(34,197,94,0.18)', color: '#22c55e', padding: '0.1rem 0.45rem', borderRadius: 4, fontSize: '0.73rem', fontWeight: 700 }}>
+                      {editingBom.length} รายการ · ฿{bomTotalCost.toFixed(2)}
+                    </span>
+                  )}
+                  <ChevronRight size={14} style={{ marginLeft: 'auto', transform: showBom ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+
+                {showBom && (
+                  <div>
+                    {/* Cost summary mini */}
+                    {editingBom.length > 0 && (
+                      <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '0.85rem', flexWrap: 'wrap' }}>
+                        {[
+                          { label: 'ต้นทุน/จาน', value: `฿${bomTotalCost.toFixed(2)}`, color: '#ef4444' },
+                          { label: 'กำไรขั้นต้น', value: `฿${(parseFloat(editingItem.price || 0) - bomTotalCost).toFixed(2)}`, color: '#22c55e' },
+                          {
+                            label: 'Margin',
+                            value: `${editingItem.price > 0 ? ((parseFloat(editingItem.price) - bomTotalCost) / parseFloat(editingItem.price) * 100).toFixed(1) : '0.0'}%`,
+                            color: editingItem.price > 0 && ((parseFloat(editingItem.price) - bomTotalCost) / parseFloat(editingItem.price) * 100) >= 50 ? '#22c55e' : '#eab308'
+                          },
+                        ].map(c => (
+                          <div key={c.label} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, padding: '0.45rem 0.85rem', textAlign: 'center', flex: 1, minWidth: 90 }}>
+                            <div style={{ fontSize: '1.05rem', fontWeight: 700, color: c.color }}>{c.value}</div>
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{c.label}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* BOM rows */}
+                    {editingBom.length > 0 && (
+                      <div style={{ marginBottom: '0.75rem' }}>
+                        {editingBom.map((row, idx) => {
+                          const rowCost = (parseFloat(row.qty) || 0) * (parseFloat(row.costPerUnit) || 0);
+                          return (
+                            <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 65px 70px auto auto', gap: '0.4rem', alignItems: 'center', marginBottom: '0.4rem' }}>
+                              {/* Ingredient */}
+                              {ingredients.length > 0 ? (
+                                <select value={row.ingId || ''} onChange={e => updateBomRow(idx, 'ingId', e.target.value)} style={{ fontSize: '0.83rem' }}>
+                                  <option value="">— เลือก —</option>
+                                  {ingredients.map(ing => <option key={ing.id} value={ing.id}>{ing.name}</option>)}
+                                </select>
+                              ) : (
+                                <input value={row.ingName || ''} onChange={e => updateBomRow(idx, 'ingName', e.target.value)} placeholder="ชื่อวัตถุดิบ" style={{ fontSize: '0.83rem' }} />
+                              )}
+                              {/* Qty */}
+                              <input type="number" min="0" step="any" value={row.qty ?? ''} onChange={e => updateBomRow(idx, 'qty', e.target.value)} placeholder="ปริมาณ" style={{ fontSize: '0.83rem', textAlign: 'center' }} />
+                              {/* Unit */}
+                              <input value={row.unit || ''} onChange={e => updateBomRow(idx, 'unit', e.target.value)} placeholder="หน่วย" style={{ fontSize: '0.83rem', textAlign: 'center' }} />
+                              {/* Cost/unit */}
+                              <input type="number" min="0" step="any" value={row.costPerUnit ?? ''} onChange={e => updateBomRow(idx, 'costPerUnit', e.target.value)} placeholder="฿/หน่วย" style={{ fontSize: '0.83rem', textAlign: 'center' }} />
+                              {/* Row cost */}
+                              <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 700, whiteSpace: 'nowrap' }}>฿{rowCost.toFixed(2)}</span>
+                              {/* Delete */}
+                              <button type="button" onClick={() => removeBomRow(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem', display: 'flex' }}>
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {/* Column labels */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 70px 65px 70px auto auto', gap: '0.4rem', marginTop: '-0.15rem' }}>
+                          {['วัตถุดิบ', 'ปริมาณ', 'หน่วย', '฿/หน่วย', 'ต้นทุน', ''].map((h, i) => (
+                            <span key={i} style={{ fontSize: '0.68rem', color: 'var(--text-muted)', textAlign: i >= 1 && i <= 4 ? 'center' : 'left' }}>{h}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {editingBom.length === 0 && (
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.83rem', margin: '0.25rem 0 0.75rem' }}>ยังไม่มีส่วนผสม — กด "เพิ่มวัตถุดิบ" เพื่อตั้งค่า BOM</p>
+                    )}
+
+                    <button type="button" className="admin-btn secondary" onClick={addBomRow} style={{ fontSize: '0.82rem', padding: '0.4rem 0.9rem' }}>
+                      <Plus size={14} /> เพิ่มวัตถุดิบ
+                    </button>
+                    {ingredients.length === 0 && (
+                      <p style={{ color: '#eab308', fontSize: '0.78rem', marginTop: '0.5rem', marginBottom: 0 }}>
+                        💡 ยังไม่มีคลังวัตถุดิบ — ไปตั้งค่าที่หน้า <strong>BOM</strong> แท็บ "วัตถุดิบ" ก่อน
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <button type="submit" className="admin-btn" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}>

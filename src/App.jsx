@@ -15,6 +15,7 @@ import ManagePrinters from './components/admin/ManagePrinters';
 import ManageUsers from './components/admin/ManageUsers';
 import ManageSettings from './components/admin/ManageSettings';
 import ManageStock from './components/admin/ManageStock';
+import ManageBOM from './components/admin/ManageBOM';
 import TableSelection from './components/TableSelection';
 import TableOrderView from './components/TableOrderView';
 import LoginScreen from './components/LoginScreen';
@@ -690,6 +691,7 @@ function App() {
           <Route path="promotions" element={<ManagePromotions />} />
           <Route path="printers" element={<ManagePrinters />} />
           <Route path="settings" element={<ManageSettings />} />
+          <Route path="bom" element={<ManageBOM />} />
           <Route path="stock" element={<ManageStock />} />
         </Route>
       </Routes>
