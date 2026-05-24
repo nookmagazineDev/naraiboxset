@@ -1,17 +1,27 @@
 import React from 'react';
 import { X, Trash2, ShoppingBag, Plus, Minus } from 'lucide-react';
 
-const CartModal = ({ cart, onClose, onRemove, onUpdateQuantity, onCheckout, lang = 'th' }) => {
-  const calculateTotal = () => {
+const CartModal = ({ cart, onClose, onRemove, onUpdateQuantity, onCheckout, lang = 'th', settings = {} }) => {
+  const calculateSubtotal = () => {
     return cart.reduce((total, item) => {
       let itemTotal = Number(item.food.price);
       if (item.allPopups && item.allPopups.length > 0) {
         item.allPopups.forEach(p => { itemTotal += Number(p.price || 0); });
       }
-
       return total + (itemTotal * (item.quantity || 1));
     }, 0);
   };
+
+  const calcCharges = (subtotal) => {
+    const scRate = settings?.serviceCharge?.enabled ? (settings.serviceCharge.rate || 0) : 0;
+    const vatRate = settings?.vat?.enabled ? (settings.vat.rate || 0) : 0;
+    const sc = Math.round(subtotal * scRate) / 100;
+    const vatBase = subtotal + sc;
+    const vat = Math.round(vatBase * vatRate) / 100;
+    return { sc, vat, grand: subtotal + sc + vat };
+  };
+
+  const calculateTotal = () => calculateSubtotal();
 
   const getSubtotal = (item) => {
       let itemTotal = Number(item.food.price);
@@ -93,17 +103,48 @@ const CartModal = ({ cart, onClose, onRemove, onUpdateQuantity, onCheckout, lang
 
         {cart.length > 0 && (
           <div className="cart-footer">
-            <div className="cart-total" style={{ marginBottom: '0.75rem' }}>
-              <span>{lang === 'th' ? 'ยอดรวมทั้งหมด:' : 'Total:'}</span>
-              <span style={{ color: 'var(--accent)' }}>฿{calculateTotal()}</span>
-            </div>
+            {(() => {
+              const subtotal = calculateSubtotal();
+              const { sc, vat, grand } = calcCharges(subtotal);
+              const hasCharges = sc > 0 || vat > 0;
+              return (
+                <div style={{ marginBottom: '0.85rem' }}>
+                  {hasCharges ? (
+                    <div style={{ fontSize: '0.88rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.6rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.65)' }}>
+                        <span>{lang === 'th' ? 'ยอดอาหาร' : 'Subtotal'}</span>
+                        <span>฿{subtotal.toLocaleString()}</span>
+                      </div>
+                      {sc > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#fbbf24' }}>
+                          <span>{lang === 'th' ? `เซอร์วิชชาร์จ ${settings.serviceCharge.rate}%` : `Service Charge ${settings.serviceCharge.rate}%`}</span>
+                          <span>+฿{sc.toLocaleString()}</span>
+                        </div>
+                      )}
+                      {vat > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#60a5fa' }}>
+                          <span>{lang === 'th' ? `VAT ${settings.vat.rate}%` : `VAT ${settings.vat.rate}%`}</span>
+                          <span>+฿{vat.toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '1.1rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.45rem', marginTop: '0.1rem' }}>
+                        <span style={{ color: 'white' }}>{lang === 'th' ? 'รวมทั้งสิ้น' : 'Grand Total'}</span>
+                        <span style={{ color: '#fbbf24' }}>฿{grand.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="cart-total" style={{ marginBottom: '0.5rem' }}>
+                      <span>{lang === 'th' ? 'ยอดรวม:' : 'Total:'}</span>
+                      <span style={{ color: 'var(--accent)' }}>฿{subtotal.toLocaleString()}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
-              <button 
-                onClick={() => {
-                  onClose();
-                  setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100);
-                }}
-                style={{ flex: 1, padding: '1rem', borderRadius: '8px', border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.25rem' }}
+              <button
+                onClick={() => { onClose(); setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 100); }}
+                style={{ flex: 1, padding: '1rem', borderRadius: '8px', border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)', fontWeight: 'bold', fontSize: '1rem', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.25rem', fontFamily: 'inherit' }}
               >
                 <Plus size={20} /> {lang === 'th' ? 'สั่งเพิ่ม' : 'Order More'}
               </button>

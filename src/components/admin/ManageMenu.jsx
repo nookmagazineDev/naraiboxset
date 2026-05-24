@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Printer } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxwR7-oivm8zdCbUtgznjoafFyfJg09TM_Iy3s8pPcOROLcsvn0CkvHt3XoH7mlU9Z-Hw/exec';
@@ -8,6 +8,7 @@ const ManageMenu = () => {
   const { lang } = useOutletContext();
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [printers, setPrinters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -16,7 +17,18 @@ const ManageMenu = () => {
 
   useEffect(() => {
     fetchMenu();
+    loadPrinters();
+    const handler = () => loadPrinters();
+    window.addEventListener('printers_changed', handler);
+    return () => window.removeEventListener('printers_changed', handler);
   }, []);
+
+  const loadPrinters = () => {
+    try {
+      const stored = localStorage.getItem('printers_config');
+      setPrinters(stored ? JSON.parse(stored) : []);
+    } catch (e) { setPrinters([]); }
+  };
 
   const fetchMenu = async () => {
     // Clear stale cache first so fresh data always wins
@@ -111,7 +123,8 @@ const ManageMenu = () => {
       price: 0,
       image: '',
       isActive: true,
-      bundledItems: []
+      bundledItems: [],
+      printerId: ''
     });
     setIsModalOpen(true);
   };
@@ -240,6 +253,7 @@ const ManageMenu = () => {
                   <th>{lang === 'th' ? 'ชื่อ (TH/EN)' : 'Name (TH/EN)'}</th>
                   <th>{lang === 'th' ? 'หมวดหมู่' : 'Category'}</th>
                   <th>{lang === 'th' ? 'ราคา' : 'Price'}</th>
+                  <th>{lang === 'th' ? 'เครื่องปริ้น' : 'Printer'}</th>
                   <th>{lang === 'th' ? 'สถานะ' : 'Status'}</th>
                   <th>{lang === 'th' ? 'จัดการ' : 'Actions'}</th>
                 </tr>
@@ -261,9 +275,21 @@ const ManageMenu = () => {
                     </td>
                     <td style={{ color: 'var(--accent)', fontWeight: 'bold' }}>฿{item.price}</td>
                     <td>
-                      <span style={{ 
-                        padding: '0.25rem 0.5rem', 
-                        borderRadius: '4px', 
+                      {(() => {
+                        const p = printers.find(pr => String(pr.id) === String(item.printerId));
+                        return p ? (
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.82rem', background: 'rgba(255,255,255,0.07)', padding: '0.25rem 0.55rem', borderRadius: '6px', whiteSpace: 'nowrap' }}>
+                            <Printer size={13} /> {p.name || p.ip}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>—</span>
+                        );
+                      })()}
+                    </td>
+                    <td>
+                      <span style={{
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px',
                         fontSize: '0.85rem',
                         background: item.isActive !== false ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
                         color: item.isActive !== false ? '#22c55e' : '#ef4444'
@@ -366,16 +392,40 @@ const ManageMenu = () => {
               </div>
 
               <div className="admin-form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <input 
-                  type="checkbox" 
-                  id="menu-active" 
-                  checked={editingItem.isActive !== false} 
-                  onChange={e => setEditingItem({...editingItem, isActive: e.target.checked})} 
-                  style={{ width: 'auto', marginBottom: 0 }} 
+                <input
+                  type="checkbox"
+                  id="menu-active"
+                  checked={editingItem.isActive !== false}
+                  onChange={e => setEditingItem({...editingItem, isActive: e.target.checked})}
+                  style={{ width: 'auto', marginBottom: 0 }}
                 />
                 <label htmlFor="menu-active" style={{ marginBottom: 0, cursor: 'pointer' }}>
                   {lang === 'th' ? 'เปิดใช้งาน (แสดงบนหน้าร้าน)' : 'Active (Show on storefront)'}
                 </label>
+              </div>
+
+              {/* Printer Selection */}
+              <div className="admin-form-group" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem', marginTop: '0.25rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.5rem' }}>
+                  <Printer size={15} /> {lang === 'th' ? 'ส่งปริ้นไปที่เครื่อง' : 'Send to Printer'}
+                </label>
+                {printers.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', margin: 0 }}>
+                    ยังไม่มีเครื่องพิมพ์ — ไปตั้งค่าที่หน้า <strong>ปริ้นเตอร์</strong> ก่อน
+                  </p>
+                ) : (
+                  <select
+                    value={editingItem.printerId || ''}
+                    onChange={e => setEditingItem({ ...editingItem, printerId: e.target.value })}
+                  >
+                    <option value="">— ไม่ระบุ —</option>
+                    {printers.map(p => (
+                      <option key={p.id} value={String(p.id)}>
+                        {p.name || p.ip} ({p.type})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* Bundled Items */}

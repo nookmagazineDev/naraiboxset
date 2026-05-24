@@ -116,9 +116,7 @@ body {
   border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
-.category-tabs::-webkit-scrollbar {
-  display: none;
-}
+.category-tabs::-webkit-scrollbar { display: none; }
 
 .tab-btn {
   background: var(--bg-card);
@@ -1163,4 +1161,504 @@ body {
 
 .category-tabs::-webkit-scrollbar {
   display: none;
+}
+
+/* ====================================================
+   POS LAYOUT — Modern staff ordering interface
+   ==================================================== */
+
+.pos-layout {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: #0a0a14;
+  z-index: 10;
+}
+
+/* ── POS Header ── */
+.pos-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6rem 1.1rem;
+  background: #0f0f1e;
+  border-bottom: 2px solid rgba(185, 28, 28, 0.35);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.6);
+  z-index: 20;
+  flex-shrink: 0;
+  gap: 0.75rem;
+}
+
+.pos-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.pos-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #d4a017;
+  flex-shrink: 0;
+}
+
+.pos-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.pos-restaurant-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.pos-table-label {
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: #d4a017;
+  background: rgba(212, 160, 23, 0.12);
+  padding: 0.1rem 0.45rem;
+  border-radius: 6px;
+  display: inline-block;
+  width: fit-content;
+}
+
+.pos-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pos-header-btn {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.42rem 0.85rem;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: all 0.18s;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.pos-header-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.pos-cart-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 0.48rem 1rem 0.48rem 0.75rem;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 700;
+  position: relative;
+  transition: all 0.18s;
+  box-shadow: 0 3px 14px rgba(185, 28, 28, 0.45);
+  font-family: inherit;
+}
+
+.pos-cart-btn:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 5px 18px rgba(185, 28, 28, 0.55);
+}
+
+.pos-cart-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.15;
+}
+
+.pos-cart-count {
+  font-size: 0.68rem;
+  font-weight: 500;
+  opacity: 0.82;
+}
+
+.pos-cart-total {
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.pos-cart-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  background: #fbbf24;
+  color: #1a0000;
+  font-size: 0.68rem;
+  font-weight: 800;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #0a0a14;
+}
+
+/* ── POS Body ── */
+.pos-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Category Bar (horizontal) ── */
+.pos-sidebar {
+  width: 100%;
+  height: auto;
+  flex-shrink: 0;
+  background: #0d0d1c;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: row;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.pos-sidebar::-webkit-scrollbar { display: none; }
+
+.pos-sidebar-header { display: none; }
+
+.pos-cat-btn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.7rem 1.25rem;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-left: none;
+  cursor: pointer;
+  transition: all 0.18s;
+  color: rgba(255, 255, 255, 0.48);
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: inherit;
+  text-align: left;
+}
+
+.pos-cat-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.pos-cat-btn.active {
+  background: rgba(185, 28, 28, 0.15);
+  color: #fff;
+  border-bottom-color: var(--accent);
+  border-left: none;
+}
+
+.pos-cat-btn.active .pos-cat-icon { transform: scale(1.12); }
+
+.pos-cat-icon {
+  font-size: 1.35rem;
+  line-height: 1;
+  transition: transform 0.18s;
+}
+
+.pos-cat-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  align-items: flex-start;
+}
+
+.pos-cat-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.pos-cat-count {
+  font-size: 0.62rem;
+  opacity: 0.42;
+}
+
+/* ── POS Main ── */
+.pos-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+.pos-main::-webkit-scrollbar { width: 5px; }
+.pos-main::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.pos-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.pos-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.pos-section-icon { font-size: 1.3rem; }
+
+.pos-section-title h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0;
+}
+
+.pos-item-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 0.25rem 0.65rem;
+  border-radius: 20px;
+}
+
+/* ── Food Grid ── */
+.pos-food-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 0.8rem;
+  align-content: start;
+}
+
+/* ── POS Food Card ── */
+.pos-food-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.18s;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.pos-food-card:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.pos-food-card.in-cart {
+  border-color: var(--accent);
+  background: rgba(185, 28, 28, 0.1);
+  box-shadow: 0 0 0 1px var(--accent), 0 4px 18px rgba(185, 28, 28, 0.22);
+}
+
+.pos-card-img-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+
+.pos-card-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.pos-food-card:hover .pos-card-img { transform: scale(1.06); }
+
+.pos-card-img-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  background: rgba(185, 28, 28, 0.08);
+}
+
+.pos-qty-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 11px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(10, 10, 20, 0.8);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.pos-card-body {
+  padding: 0.6rem 0.7rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.25rem;
+}
+
+.pos-card-name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+}
+
+.pos-card-desc {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+  flex: 1;
+}
+
+.pos-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.45rem;
+  gap: 0.3rem;
+}
+
+.pos-card-price {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fbbf24;
+  letter-spacing: -0.01em;
+  flex-shrink: 0;
+}
+
+.pos-add-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(185, 28, 28, 0.4);
+}
+
+.pos-add-btn:hover { background: var(--accent-hover); transform: scale(1.12); }
+.pos-add-btn:active { transform: scale(0.93); }
+
+.pos-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 20px;
+  padding: 0.12rem;
+  border: 1px solid rgba(185, 28, 28, 0.4);
+  flex-shrink: 0;
+}
+
+.pos-stepper-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+
+.pos-stepper-btn.minus { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.pos-stepper-btn.minus:hover { background: rgba(255, 255, 255, 0.2); }
+.pos-stepper-btn.plus { background: var(--accent); color: #fff; }
+.pos-stepper-btn.plus:hover { background: var(--accent-hover); }
+
+.pos-stepper-qty {
+  font-size: 0.8rem;
+  font-weight: 700;
+  min-width: 16px;
+  text-align: center;
+  color: #fff;
+}
+
+.pos-empty-category {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .pos-cat-count { display: none; }
+  .pos-cat-btn { padding: 0.65rem 1rem; gap: 0.45rem; }
+  .pos-food-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .pos-cart-info { display: none; }
+}
+
+@media (max-width: 480px) {
+  .pos-cat-btn { padding: 0.6rem 0.85rem; gap: 0.35rem; }
+  .pos-cat-icon { font-size: 1.15rem; }
+  .pos-cat-name { font-size: 0.75rem; }
+  .pos-main { padding: 0.65rem; }
+  .pos-food-grid { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+  .pos-cart-btn { padding: 0.48rem 0.7rem; }
+  .pos-header { padding: 0.5rem 0.7rem; }
+  .pos-header-btn { padding: 0.38rem 0.6rem; font-size: 0.75rem; }
 }

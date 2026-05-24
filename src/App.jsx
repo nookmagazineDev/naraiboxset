@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { ShoppingCart, ClipboardList, Store, Globe, ShoppingBag, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ShoppingCart, ClipboardList, Store, Globe, ShoppingBag } from 'lucide-react';
 import FoodCard from './components/FoodCard';
 import OrderWizardModal from './components/OrderWizardModal';
 import CartModal from './components/CartModal';
@@ -13,6 +13,7 @@ import ManagePromotions from './components/admin/ManagePromotions';
 import ManageCategories from './components/admin/ManageCategories';
 import ManagePrinters from './components/admin/ManagePrinters';
 import ManageUsers from './components/admin/ManageUsers';
+import ManageSettings from './components/admin/ManageSettings';
 import TableSelection from './components/TableSelection';
 import TableOrderView from './components/TableOrderView';
 import LoginScreen from './components/LoginScreen';
@@ -27,7 +28,6 @@ function App() {
   const [activeCategory, setActiveCategory] = useState('food');
   const [lang, setLang] = useState('th');
   const [tableNumber, setTableNumber] = useState(localStorage.getItem('table_number') || '');
-  const isScrollingRef = React.useRef(false);
 
   // Users & Auth
   const [users, setUsers] = useState([]);
@@ -58,6 +58,19 @@ function App() {
   ]);
   const [allCategories, setAllCategories] = useState([]);
   const [allMenu, setAllMenu] = useState([...MENU_ITEMS]);
+
+  // POS Settings (service charge, VAT)
+  const [posSettings, setPosSettings] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('pos_settings') || '{}'); } catch { return {}; }
+  });
+
+  React.useEffect(() => {
+    const handler = () => {
+      try { setPosSettings(JSON.parse(localStorage.getItem('pos_settings') || '{}')); } catch {}
+    };
+    window.addEventListener('pos_settings_changed', handler);
+    return () => window.removeEventListener('pos_settings_changed', handler);
+  }, []);
 
   // TABLE ORDERS STATE
   const [tableOrders, setTableOrders] = useState([]);
@@ -162,63 +175,12 @@ function App() {
     };
   }, []);
 
-  // Update active tab based on scroll position
   React.useEffect(() => {
-    if (location.pathname !== '/index') return;
-    const handleScroll = () => {
-      const header = document.querySelector('.sticky-header');
-      const offset = header ? header.offsetHeight + 20 : 120;
-      const visibleCats = categories.filter(cat => liveMenu.some(i => (i.category || 'food') === cat.slug));
-      if (isScrollingRef.current) return;
-      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 10) {
-        if (visibleCats.length > 0) {
-          const lastSlug = visibleCats[visibleCats.length - 1].slug;
-          if (activeCategory !== lastSlug) setActiveCategory(lastSlug);
-          return;
-        }
-      }
-      const sections = visibleCats.map(c => `${c.slug}-section`);
-      let current = activeCategory;
-      for (const section of sections) {
-        const element = document.getElementById(section);
-        if (element) {
-          const rect = element.getBoundingClientRect();
-          if (rect.top <= offset && rect.bottom >= offset) {
-            current = section.replace('-section', '');
-            break;
-          }
-        }
-      }
-      if (current !== activeCategory) setActiveCategory(current);
-    };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [location.pathname, categories, liveMenu, activeCategory]);
-
-  React.useEffect(() => {
-    if (categoryNavRef.current) {
-      const activeTab = categoryNavRef.current.querySelector('.tab-btn.active');
-      if (activeTab) activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    const visibleCats = categories.filter(cat => liveMenu.some(i => (i.category || 'food') === cat.slug));
+    if (visibleCats.length > 0 && !visibleCats.find(c => c.slug === activeCategory)) {
+      setActiveCategory(visibleCats[0].slug);
     }
-  }, [activeCategory]);
-
-  const scrollToCategory = (slug) => {
-    isScrollingRef.current = true;
-    setActiveCategory(slug);
-    const el = document.getElementById(`${slug}-section`);
-    const header = document.querySelector('.sticky-header');
-    if (el) {
-      const offset = header ? header.offsetHeight + 20 : 120;
-      const y = el.getBoundingClientRect().top + window.pageYOffset - offset;
-      window.scrollTo({ top: y, behavior: 'smooth' });
-    }
-    setTimeout(() => { isScrollingRef.current = false; }, 800);
-  };
-
-  const categoryNavRef = React.useRef(null);
-  const scrollNav = (direction) => {
-    if (categoryNavRef.current) categoryNavRef.current.scrollBy({ left: direction * 200, behavior: 'smooth' });
-  };
+  }, [categories, liveMenu]);
 
   const [selectedFood, setSelectedFood] = useState(null);
   const [cart, setCart] = useState([]);
@@ -375,7 +337,8 @@ function App() {
   // =============================================
   // NEW: Complete payment - save to Orders, clear TableOrders
   // =============================================
-  const handleCheckoutComplete = async () => {
+  const handleCheckoutComplete = async (grandTotal, paymentMethod) => {
+    const finalTotal = grandTotal || checkoutTotal;
     const nextNum = maxOrderNum + 1;
     setMaxOrderNum(nextNum);
     const newOrderNumber = `#${String(nextNum).padStart(3, '0')}`;
@@ -394,13 +357,13 @@ function App() {
       rowsToSend.push([
         timestamp, newOrderNumber, customerName, address,
         item.ItemName + qtyText, 'ทานที่ร้าน', price,
-        checkoutTotal, 'Completed', timestamp, timestamp, currentUser ? currentUser.username : ''
+        finalTotal, 'Completed', timestamp, timestamp, currentUser ? currentUser.username : ''
       ]);
       if (item.Options) {
         rowsToSend.push([
           timestamp, newOrderNumber, customerName, address,
           `↳ ${item.Options}`, 'ทานที่ร้าน', 0,
-          checkoutTotal, 'Completed', timestamp, timestamp, currentUser ? currentUser.username : ''
+          finalTotal, 'Completed', timestamp, timestamp, currentUser ? currentUser.username : ''
         ]);
       }
     });
@@ -410,7 +373,7 @@ function App() {
       orderNumber: newOrderNumber,
       customerDetails: { name: customerName, address },
       items: checkoutItems.map(i => ({ isFlattened: true, name: i.ItemName, dining: 'ทานที่ร้าน' })),
-      total: checkoutTotal,
+      total: finalTotal,
       status: 'completed',
       timestamp
     };
@@ -617,158 +580,97 @@ function App() {
 
         <Route path="/index" element={
           !tableNumber ? <Navigate to="/table-select" replace /> :
-            <>
-              <header className="app-header sticky-header" style={{ margin: '0 0 1rem 0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    <h1 style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: 0 }}>
-                      <img src="/logo.png" alt="Logo" style={{ height: '48px', width: '48px', objectFit: 'cover', borderRadius: '50%', border: '2px solid gold' }} />
-                      <span>{lang === 'th' ? 'เสน่ห์' : 'Sa-Nae'}</span>
-                    </h1>
-                    <p style={{ margin: '4px 0 0 60px', fontSize: '0.82rem', color: 'rgba(255,255,255,0.6)' }}>
-                      {lang === 'th' ? `โต๊ะ ${tableNumber}` : `Table ${tableNumber}`}
-                    </p>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <button
-                      onClick={() => navigate('/table-orders')}
-                      style={{
-                        background: 'rgba(255,255,255,0.08)',
-                        backdropFilter: 'blur(8px)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        color: 'white',
-                        padding: '0.5rem 0.8rem',
-                        borderRadius: '12px',
-                        cursor: 'pointer',
-                        fontWeight: '600',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.4rem',
-                        fontSize: '0.85rem',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      🧾 {lang === 'th' ? 'โต๊ะ' : 'Table'}
-                    </button>
-
-                    <button
-                      onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
-                      style={{
-                        background: 'rgba(0,0,0,0.3)',
-                        backdropFilter: 'blur(8px)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        color: 'white',
-                        padding: '0.5rem 0.8rem',
-                        borderRadius: '12px',
-                        cursor: 'pointer',
-                        fontWeight: '600',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.4rem',
-                        fontSize: '0.9rem',
-                        transition: 'all 0.2s'
-                      }}
-                      className="lang-toggle-hover"
-                    >
-                      <Globe size={16} />
-                      {lang === 'th' ? 'TH' : 'EN'}
-                    </button>
-
-                    <button
-                      onClick={() => setIsCartOpen(true)}
-                      style={{
-                        background: 'var(--accent)',
-                        color: 'white',
-                        border: 'none',
-                        padding: '0.5rem',
-                        borderRadius: '12px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        position: 'relative',
-                        boxShadow: '0 4px 12px rgba(249, 115, 22, 0.4)',
-                        transition: 'all 0.2s'
-                      }}
-                      className="cart-btn-hover"
-                    >
-                      <ShoppingBag size={22} />
-                      {cart.length > 0 && (
-                        <span style={{
-                          position: 'absolute',
-                          top: '-6px',
-                          right: '-6px',
-                          background: '#b91c1c',
-                          color: 'white',
-                          fontSize: '0.75rem',
-                          fontWeight: 'bold',
-                          minWidth: '20px',
-                          height: '20px',
-                          borderRadius: '10px',
-                          padding: '0 4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          border: '2px solid var(--bg-dark)'
-                        }}>
-                          {cart.reduce((s, i) => s + (i.quantity || 1), 0)}
-                        </span>
-                      )}
-                    </button>
+            <div className="pos-layout">
+              {/* ─── POS Header ─── */}
+              <header className="pos-header">
+                <div className="pos-header-left">
+                  <img src="/logo.png" alt="Logo" className="pos-logo" />
+                  <div className="pos-header-info">
+                    <span className="pos-restaurant-name">{lang === 'th' ? 'เสน่ห์' : 'Sa-Nae'}</span>
+                    <span className="pos-table-label">{lang === 'th' ? `โต๊ะ ${tableNumber}` : `Table ${tableNumber}`}</span>
                   </div>
                 </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', width: '100%', position: 'relative' }}>
-                  <button onClick={() => scrollNav(-1)} style={{ background: 'none', border: 'none', color: 'white', padding: '0 0.5rem', cursor: 'pointer', flexShrink: 0, opacity: 0.8 }} aria-label="Scroll left">
-                    <ChevronLeft size={24} />
+                <div className="pos-header-right">
+                  <button className="pos-header-btn" onClick={() => navigate('/table-orders')}>
+                    🧾 {lang === 'th' ? 'รายการโต๊ะ' : 'Table'}
                   </button>
-                  <div className="category-tabs" ref={categoryNavRef} style={{ flex: 1, margin: 0, paddingBottom: '0.5rem', borderBottom: 'none', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                    {categories.filter(cat => liveMenu.some(i => (i.category || 'food') === cat.slug)).map(cat => (
-                      <button
-                        key={cat.slug}
-                        className={`tab-btn ${activeCategory === cat.slug ? 'active' : ''}`}
-                        onClick={() => scrollToCategory(cat.slug)}
-                      >
-                        <span style={{ fontSize: '1.25rem' }}>{cat.icon}</span> {lang === 'th' ? cat.name : cat.nameEn}
-                      </button>
-                    ))}
-                  </div>
-                  <button onClick={() => scrollNav(1)} style={{ background: 'none', border: 'none', color: 'white', padding: '0 0.5rem', cursor: 'pointer', flexShrink: 0, opacity: 0.8 }} aria-label="Scroll right">
-                    <ChevronRight size={24} />
+                  <button className="pos-header-btn" onClick={() => setLang(lang === 'th' ? 'en' : 'th')}>
+                    <Globe size={14} /> {lang === 'th' ? 'TH' : 'EN'}
+                  </button>
+                  <button className="pos-cart-btn" onClick={() => setIsCartOpen(true)}>
+                    <ShoppingBag size={20} />
+                    <div className="pos-cart-info">
+                      <span className="pos-cart-count">{cart.reduce((s, i) => s + (i.quantity || 1), 0)} {lang === 'th' ? 'รายการ' : 'items'}</span>
+                      <span className="pos-cart-total">฿{getCartTotal().toLocaleString()}</span>
+                    </div>
+                    {cart.length > 0 && (
+                      <span className="pos-cart-badge">{cart.reduce((s, i) => s + (i.quantity || 1), 0)}</span>
+                    )}
                   </button>
                 </div>
               </header>
 
-              <div className="menu-container">
-                {categories.filter(cat => liveMenu.some(i => (i.category || 'food') === cat.slug)).map((cat, index, arr) => (
-                  <React.Fragment key={cat.slug}>
-                    <div className="category-section" id={`${cat.slug}-section`} style={{ paddingTop: '1rem' }}>
-                      <h2 className="section-title">{lang === 'th' ? cat.name : cat.nameEn}</h2>
-                      <main className="food-list">
-                        {liveMenu.filter(i => (i.category || 'food') === cat.slug).map((item) => (
-                          <FoodCard
-                            key={item.id}
-                            food={item}
-                            lang={lang}
-                            onOrderClick={handleOrderClick}
-                            onDecreaseClick={handleDecreaseQuantity}
-                            cartQuantity={cart.filter(c => c.food.id === item.id).reduce((sum, c) => sum + (c.quantity || 1), 0)}
-                          />
-                        ))}
-                      </main>
-                    </div>
-                    {index < arr.length - 1 && (
-                      <div className="category-separator">
-                        <div className="separator-line"></div>
-                        <div className="separator-dot"></div>
-                        <div className="separator-line"></div>
-                      </div>
-                    )}
-                  </React.Fragment>
-                ))}
+              <div className="pos-body">
+                {/* ─── Category Sidebar ─── */}
+                <aside className="pos-sidebar">
+                  <div className="pos-sidebar-header">{lang === 'th' ? 'หมวดหมู่' : 'Categories'}</div>
+                  {categories
+                    .filter(cat => liveMenu.some(i => (i.category || 'food') === cat.slug))
+                    .map(cat => {
+                      const count = liveMenu.filter(i => (i.category || 'food') === cat.slug).length;
+                      return (
+                        <button
+                          key={cat.slug}
+                          className={`pos-cat-btn ${activeCategory === cat.slug ? 'active' : ''}`}
+                          onClick={() => setActiveCategory(cat.slug)}
+                        >
+                          <span className="pos-cat-icon">{cat.icon}</span>
+                          <div className="pos-cat-text">
+                            <span className="pos-cat-name">{lang === 'th' ? cat.name : cat.nameEn}</span>
+                            <span className="pos-cat-count">{count} {lang === 'th' ? 'รายการ' : 'items'}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </aside>
+
+                {/* ─── Food Grid ─── */}
+                <main className="pos-main">
+                  {(() => {
+                    const activeCat = categories.find(c => c.slug === activeCategory);
+                    const filteredItems = liveMenu.filter(i => (i.category || 'food') === activeCategory);
+                    return (
+                      <>
+                        <div className="pos-section-header">
+                          <div className="pos-section-title">
+                            <span className="pos-section-icon">{activeCat?.icon}</span>
+                            <h2>{lang === 'th' ? activeCat?.name : activeCat?.nameEn}</h2>
+                          </div>
+                          <span className="pos-item-count">{filteredItems.length} {lang === 'th' ? 'รายการ' : 'items'}</span>
+                        </div>
+                        <div className="pos-food-grid">
+                          {filteredItems.map(item => (
+                            <FoodCard
+                              key={item.id}
+                              food={item}
+                              lang={lang}
+                              onOrderClick={handleOrderClick}
+                              onDecreaseClick={handleDecreaseQuantity}
+                              cartQuantity={cart.filter(c => c.food.id === item.id).reduce((sum, c) => sum + (c.quantity || 1), 0)}
+                            />
+                          ))}
+                          {filteredItems.length === 0 && (
+                            <div className="pos-empty-category">
+                              <span>{lang === 'th' ? 'ไม่มีรายการในหมวดหมู่นี้' : 'No items in this category'}</span>
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </main>
               </div>
-            </>
+            </div>
         } />
 
         <Route path="/kitchen" element={
@@ -786,6 +688,7 @@ function App() {
           <Route path="users" element={<ManageUsers />} />
           <Route path="promotions" element={<ManagePromotions />} />
           <Route path="printers" element={<ManagePrinters />} />
+          <Route path="settings" element={<ManageSettings />} />
         </Route>
       </Routes>
 
@@ -808,6 +711,7 @@ function App() {
           onRemove={handleRemoveFromCart}
           onUpdateQuantity={handleUpdateQuantity}
           onCheckout={handleSendOrderToTable}
+          settings={posSettings}
         />
       )}
 
@@ -819,6 +723,7 @@ function App() {
           orderNumber={`#${String(maxOrderNum + 1).padStart(3, '0')}`}
           onClose={() => setIsCheckoutOpen(false)}
           onComplete={handleCheckoutComplete}
+          settings={posSettings}
         />
       )}
     </div>
