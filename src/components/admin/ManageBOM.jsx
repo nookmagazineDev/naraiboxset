@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxwR7-oivm8zdCbUtgznjoafFyfJg09TM_Iy3s8pPcOROLcsvn0CkvHt3XoH7mlU9Z-Hw/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
 
 // ─── Helper: derive current BOM rows for selectedMenuId from bomConfig ───────
 const getBomRows = (bomConfig, menuId) =>
