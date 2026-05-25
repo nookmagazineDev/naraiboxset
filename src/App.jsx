@@ -214,7 +214,18 @@ function App() {
       }]);
       setIsCartOpen(true);
     } else {
-      setSelectedFood(food);
+      // ถ้าหมวดไม่มีเซต popup ไว้เลย → เพิ่มลงตะกร้าทันทีโดยไม่ต้องเด้ง wizard
+      const cats = allCategories.length > 0 ? allCategories : categories;
+      const catConfig = cats.find(c => c.slug === food.category) || {};
+      const hasPopups = [1, 2, 3, 4, 5, 6].some(i => catConfig[`hasPopup${i}`] === true);
+      if (!hasPopups) {
+        handleConfirmOrder(food, {
+          allPopups: [],
+          dining: { id: 'dine_in', name: 'ทานที่ร้าน', nameEn: 'Dine-in' }
+        });
+      } else {
+        setSelectedFood(food);
+      }
     }
   };
 
