@@ -567,6 +567,7 @@ function App() {
               tableOrders={tableOrders}
               lang={lang}
               currentUser={currentUser}
+              settings={posSettings}
               onAddMore={() => navigate('/index')}
               onCheckout={handleOpenCheckoutFromTable}
               onDeleteItem={handleDeleteTableItem}

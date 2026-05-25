@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { ShoppingBag, Plus, CreditCard, Trash2, ChevronLeft, RefreshCw } from 'lucide-react';
 
+const calcCharges = (subtotal, settings = {}) => {
+  const scRate = settings?.serviceCharge?.enabled ? (settings.serviceCharge.rate || 0) : 0;
+  const vatRate = settings?.vat?.enabled ? (settings.vat.rate || 0) : 0;
+  const sc = Math.round(subtotal * scRate) / 100;
+  const vatBase = subtotal + sc;
+  const vat = Math.round(vatBase * vatRate) / 100;
+  return { sc, vat, grand: subtotal + sc + vat };
+};
+
 const TableOrderView = ({
   tableNumber,
   tableOrders,
@@ -12,7 +21,8 @@ const TableOrderView = ({
   onRefresh,
   isRefreshing,
   onMoveMerge,
-  currentUser
+  currentUser,
+  settings = {}
 }) => {
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionType, setActionType] = useState(''); // 'move' or 'merge'
@@ -253,25 +263,53 @@ const TableOrderView = ({
         flexDirection: 'column',
         gap: '0.75rem'
       }}>
-        {pendingItems.length > 0 && (
-          <div style={{
-            background: 'var(--bg-card)',
-            border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: '12px',
-            padding: '0.75rem 1rem',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '0.25rem'
-          }}>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-              {lang === 'th' ? 'ยอดรวม' : 'Total'}
-            </span>
-            <span style={{ color: 'var(--accent)', fontWeight: '800', fontSize: '1.4rem' }}>
-              ฿{totalAmount.toLocaleString()}
-            </span>
-          </div>
-        )}
+        {pendingItems.length > 0 && (() => {
+          const { sc, vat, grand } = calcCharges(totalAmount, settings);
+          const hasCharges = sc > 0 || vat > 0;
+          return (
+            <div style={{
+              background: 'var(--bg-card)',
+              border: '1px solid rgba(255,255,255,0.07)',
+              borderRadius: '12px',
+              padding: '0.75rem 1rem',
+              marginBottom: '0.25rem'
+            }}>
+              {hasCharges ? (
+                <div style={{ fontSize: '0.88rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'rgba(255,255,255,0.65)' }}>
+                    <span>{lang === 'th' ? 'ยอดอาหาร' : 'Subtotal'}</span>
+                    <span>฿{totalAmount.toLocaleString()}</span>
+                  </div>
+                  {sc > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#fbbf24' }}>
+                      <span>{lang === 'th' ? `เซอร์วิชชาร์จ ${settings.serviceCharge.rate}%` : `Service Charge ${settings.serviceCharge.rate}%`}</span>
+                      <span>+฿{sc.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {vat > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#60a5fa' }}>
+                      <span>{lang === 'th' ? `VAT ${settings.vat.rate}%` : `VAT ${settings.vat.rate}%`}</span>
+                      <span>+฿{vat.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '1.1rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '0.45rem', marginTop: '0.1rem' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>{lang === 'th' ? 'ยอดรวม' : 'Total'}</span>
+                    <span style={{ color: 'var(--accent)', fontSize: '1.4rem' }}>฿{grand.toLocaleString()}</span>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+                    {lang === 'th' ? 'ยอดรวม' : 'Total'}
+                  </span>
+                  <span style={{ color: 'var(--accent)', fontWeight: '800', fontSize: '1.4rem' }}>
+                    ฿{totalAmount.toLocaleString()}
+                  </span>
+                </div>
+              )}
+            </div>
+          );
+        })()}
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button
             onClick={onAddMore}
