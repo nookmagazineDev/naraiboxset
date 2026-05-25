@@ -27,7 +27,7 @@ const AdminLayout = ({ lang, setLang }) => {
                 <Users size={20} /> {lang === 'th' ? 'พนักงาน' : 'Users'}
              </NavLink>
              <NavLink to="/admin/promotions" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
-                <Tag size={20} /> {lang === 'th' ? 'โปรโมชัน' : 'Promotions'}
+                <Tag size={20} /> {lang === 'th' ? 'ส่วนลด' : 'Discounts'}
              </NavLink>
              <NavLink to="/admin/printers" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
                 <Store size={20} /> {lang === 'th' ? 'ปริ้นเตอร์' : 'Printers'}

@@ -74,6 +74,19 @@ function App() {
     return () => window.removeEventListener('pos_settings_changed', handler);
   }, []);
 
+  // POS Discounts
+  const [posDiscounts, setPosDiscounts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('pos_discounts') || '[]'); } catch { return []; }
+  });
+
+  React.useEffect(() => {
+    const handler = () => {
+      try { setPosDiscounts(JSON.parse(localStorage.getItem('pos_discounts') || '[]')); } catch {}
+    };
+    window.addEventListener('pos_discounts_changed', handler);
+    return () => window.removeEventListener('pos_discounts_changed', handler);
+  }, []);
+
   // TABLE ORDERS STATE
   const [tableOrders, setTableOrders] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -729,6 +742,7 @@ function App() {
           onClose={() => setIsCheckoutOpen(false)}
           onComplete={handleCheckoutComplete}
           settings={posSettings}
+          discounts={posDiscounts}
         />
       )}
     </div>
