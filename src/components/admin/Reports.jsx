@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
 import { BarChart2, TrendingUp, Receipt, XCircle, Clock, RefreshCw, Download } from 'lucide-react';
-import * as XLSX from 'xlsx';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
 
@@ -34,25 +33,33 @@ const dayStr = (ts) => {
   catch { return String(ts); }
 };
 
-// ─── Excel export helper ────────────────────────────────────
-const exportXLSX = (sheets, filename) => {
-  const wb = XLSX.utils.book_new();
+// ─── CSV export helper (ไม่ต้องใช้ library — Excel เปิดได้) ─
+const esc = (v) => {
+  const s = String(v ?? '');
+  return (s.includes(',') || s.includes('"') || s.includes('\n'))
+    ? `"${s.replace(/"/g, '""')}"` : s;
+};
+
+const downloadCSV = (headers, rows, filename) => {
+  const BOM = '﻿'; // UTF-8 BOM — ทำให้ Excel แสดงภาษาไทยถูกต้อง
+  const csv = BOM + [headers, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename + '.csv'; a.click();
+  URL.revokeObjectURL(url);
+};
+
+// Export หลาย sheet → หลายไฟล์ CSV (zip ไม่ใช้ library จึง export แยกทีละไฟล์)
+const exportXLSX = (sheets, filenameBase) => {
+  if (sheets.length === 1) {
+    downloadCSV(sheets[0].headers, sheets[0].rows, filenameBase + '_' + sheets[0].name);
+    return;
+  }
+  // Export ทีละ sheet
   sheets.forEach(({ name, headers, rows }) => {
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    // Bold header row
-    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const cell = ws[XLSX.utils.encode_cell({ r: 0, c })];
-      if (cell) { cell.s = { font: { bold: true }, fill: { fgColor: { rgb: 'F3E8FF' } } }; }
-    }
-    // Auto column width
-    ws['!cols'] = headers.map((h, i) => {
-      const maxLen = Math.max(h.length, ...rows.map(r => String(r[i] ?? '').length));
-      return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
-    });
-    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+    downloadCSV(headers, rows, filenameBase + '_' + name);
   });
-  XLSX.writeFile(wb, filename + '.xlsx');
 };
 
 // ─── Styles ─────────────────────────────────────────────────
@@ -184,7 +191,7 @@ export default function Reports() {
         </div>
         {data && (
           <button onClick={exportAll} style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: 10, color: '#22c55e', cursor: 'pointer', padding: '0.6rem 1.1rem', fontWeight: 700, fontSize: '0.875rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Download size={16} /> Export ทั้งหมด (.xlsx)
+            <Download size={16} /> Export ทั้งหมด (.csv)
           </button>
         )}
       </div>
@@ -233,7 +240,7 @@ export default function Reports() {
           {/* Export button per tab */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
             <button onClick={TAB_EXPORT[tab]} style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 8, color: '#22c55e', cursor: 'pointer', padding: '0.4rem 0.9rem', fontWeight: 600, fontSize: '0.8rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Download size={14} /> Export แท็บนี้ (.xlsx)
+              <Download size={14} /> Export แท็บนี้ (.csv)
             </button>
           </div>
 
