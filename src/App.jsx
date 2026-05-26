@@ -446,6 +446,26 @@ function App() {
     }
 
     try {
+      // Deduct stock based on BOM
+      const deductItems = checkoutItems
+        .map(item => {
+          const menuItem = allMenu.find(m => m.name === item.ItemName || m.nameEn === item.ItemNameEn);
+          return menuItem ? { menuId: String(menuItem.id), menuName: item.ItemName, qty: Number(item.Quantity) || 1 } : null;
+        })
+        .filter(Boolean);
+      if (deductItems.length > 0) {
+        await fetch(GAS_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'deductStock', orderNumber: newOrderNumber, tableNo: String(tableNumber), items: deductItems })
+        });
+      }
+    } catch (error) {
+      console.error('Error deducting stock:', error);
+    }
+
+    try {
       // Print receipt
       const receiptIP = localStorage.getItem('printer_receipt_ip');
       if (receiptIP) {
