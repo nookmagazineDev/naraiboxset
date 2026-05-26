@@ -24,7 +24,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Discounts', ['id', 'name', 'type', 'value', 'categories']);
   getOrCreateSheet(ss, 'Settings', ['key', 'value']);
   getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
-  getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'productName', 'qty', 'note', 'staff']);
+  getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'phone', 'productName', 'qty', 'note', 'staff']);
 }
 
 // ──────────────────────────────────────────────
@@ -350,7 +350,7 @@ function doPost(e) {
 
   if (action === 'saveLiquorRecord') {
     var sh = getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'productName', 'qty', 'note', 'staff']);
-    sh.appendRow([new Date().toISOString(), postData.type || 'ฝาก', postData.customerName || '', postData.productName || '', Number(postData.qty) || 0, postData.note || '', postData.staff || '']);
+    sh.appendRow([new Date().toISOString(), postData.type || 'ฝาก', postData.customerName || '', postData.phone || '', postData.productName || '', Number(postData.qty) || 0, postData.note || '', postData.staff || '']);
     return _bomJson({ success: true });
   }
 

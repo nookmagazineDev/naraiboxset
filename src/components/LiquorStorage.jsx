@@ -3,7 +3,7 @@ import { Wine, Plus, ArrowDownCircle, ArrowUpCircle, RefreshCw, X, Save, Chevron
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
 
-const EMPTY_FORM = { customerName: '', productName: '', qty: '', note: '' };
+const EMPTY_FORM = { customerName: '', phone: '', productName: '', qty: '', note: '' };
 
 const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
   const [records, setRecords]           = useState([]);
@@ -33,6 +33,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
     if (!stockMap[key]) {
       stockMap[key] = {
         customerName: r.customerName,
+        phone:        r.phone || '',
         productName:  r.productName,
         qty:          0,
         lastDepositAt:    null,
@@ -41,6 +42,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
         lastWithdrawStaff: '',
       };
     }
+    if (r.phone) stockMap[key].phone = r.phone;
     const q = Number(r.qty) || 0;
     if (r.type === 'ฝาก') {
       stockMap[key].qty += q;
@@ -97,6 +99,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
           action:       'saveLiquorRecord',
           type,
           customerName: form.customerName.trim(),
+          phone:        form.phone.trim(),
           productName:  form.productName.trim(),
           qty:          Number(form.qty),
           note:         form.note.trim(),
@@ -108,6 +111,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
         timestamp:    new Date().toISOString(),
         type,
         customerName: form.customerName.trim(),
+        phone:        form.phone.trim(),
         productName:  form.productName.trim(),
         qty:          Number(form.qty),
         note:         form.note.trim(),
@@ -190,6 +194,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
                   </div>
                   <div style={{ flex: 1, minWidth: 160 }}>
                     <div style={{ fontWeight: 800, fontSize: '1rem', color: 'white' }}>{item.customerName}</div>
+                    {item.phone && <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.78rem', marginTop: 1 }}>📞 {item.phone}</div>}
                     <div style={{ color: '#a78bfa', fontWeight: 600, fontSize: '0.9rem', marginTop: 2 }}>{item.productName}</div>
                     {item.lastDepositAt && (
                       <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -225,7 +230,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                 <thead>
                   <tr style={{ background: 'rgba(255,255,255,0.04)' }}>
-                    {['วันเวลา', 'ประเภท', 'ชื่อลูกค้า', 'สินค้า', 'จำนวน', 'หมายเหตุ', 'พนักงาน'].map(h => (
+                    {['วันเวลา', 'ประเภท', 'ชื่อลูกค้า', 'เบอร์โทร', 'สินค้า', 'จำนวน', 'หมายเหตุ', 'พนักงาน'].map(h => (
                       <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', color: 'rgba(255,255,255,0.5)', fontWeight: 600, fontSize: '0.78rem', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>{h}</th>
                     ))}
                   </tr>
@@ -240,6 +245,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
                         </span>
                       </td>
                       <td style={{ padding: '0.7rem 1rem', fontWeight: 600 }}>{r.customerName}</td>
+                      <td style={{ padding: '0.7rem 1rem', color: 'rgba(255,255,255,0.5)', fontSize: '0.82rem' }}>{r.phone || '—'}</td>
                       <td style={{ padding: '0.7rem 1rem', color: '#a78bfa' }}>{r.productName}</td>
                       <td style={{ padding: '0.7rem 1rem', fontWeight: 700, textAlign: 'center' }}>{r.qty}</td>
                       <td style={{ padding: '0.7rem 1rem', color: 'rgba(255,255,255,0.5)', fontSize: '0.82rem' }}>{r.note || '—'}</td>
@@ -279,6 +285,11 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
                 ) : (
                   <input style={inputStyle} placeholder="ชื่อลูกค้า" value={form.customerName} onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} />
                 )}
+              </div>
+
+              <div>
+                <label style={labelStyle}>เบอร์โทรศัพท์</label>
+                <input style={inputStyle} placeholder="0xx-xxx-xxxx" type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
               </div>
 
               <div>
