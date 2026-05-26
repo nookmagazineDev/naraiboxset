@@ -39,6 +39,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
         qty:          0,
         lastDepositAt:    null,
         lastDepositStaff: '',
+        lastDepositNote:  '',
         lastWithdrawAt:    null,
         lastWithdrawStaff: '',
       };
@@ -50,6 +51,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
       if (!stockMap[key].lastDepositAt || r.timestamp > stockMap[key].lastDepositAt) {
         stockMap[key].lastDepositAt    = r.timestamp;
         stockMap[key].lastDepositStaff = r.staff;
+        stockMap[key].lastDepositNote  = r.note || '';
       }
     } else {
       stockMap[key].qty -= q;
@@ -316,6 +318,12 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
                 <span style={{ color: 'rgba(255,255,255,0.5)' }}>สินค้า</span>
                 <span style={{ color: '#a78bfa', fontWeight: 600 }}>{confirmItem.productName}</span>
               </div>
+              {confirmItem.lastDepositNote && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', gap: '0.75rem' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.45)', flexShrink: 0 }}>หมายเหตุ (ฝาก)</span>
+                  <span style={{ color: 'rgba(255,255,255,0.75)', textAlign: 'right' }}>{confirmItem.lastDepositNote}</span>
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
                 <span style={{ color: 'rgba(255,255,255,0.5)' }}>จำนวนที่เบิก</span>
                 <strong style={{ color: '#f97316', fontSize: '1.1rem' }}>{confirmItem.qty} ขวด</strong>
