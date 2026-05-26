@@ -295,9 +295,8 @@ const ManageStock = () => {
             </div>
 
             {/* แถวหัว */}
-            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 90px 110px 1fr 36px', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 0.25rem' }}>
-              <span>รหัสวัตถุดิบ</span>
-              <span>ชื่อ (ดูจากชีท)</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 90px 110px 1fr 36px', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 0.25rem' }}>
+              <span>วัตถุดิบ</span>
               <span>จำนวน</span>
               <span>ราคา/หน่วย ฿</span>
               <span>หมายเหตุ</span>
@@ -306,17 +305,19 @@ const ManageStock = () => {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '320px', overflowY: 'auto', marginBottom: '1.25rem' }}>
               {stockInForm.map((row, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '120px 1fr 90px 110px 1fr 36px', gap: '0.5rem', alignItems: 'center' }}>
-                  <input
-                    placeholder="ING-001"
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 90px 110px 1fr 36px', gap: '0.5rem', alignItems: 'center' }}>
+                  <select
                     value={row.ingId}
-                    onChange={e => updateStockInRow(i, 'ingId', e.target.value.toUpperCase())}
-                    style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
-                  />
-                  {/* ชื่อดึงจาก stock ที่โหลดมา */}
-                  <div style={{ padding: '0.5rem 0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', fontSize: '0.82rem', color: 'var(--text-muted)', border: '1px solid rgba(255,255,255,0.08)', minHeight: '38px', display: 'flex', alignItems: 'center' }}>
-                    {stock.find(s => s.id === row.ingId)?.name || <span style={{ opacity: 0.4 }}>— พิมพ์รหัส —</span>}
-                  </div>
+                    onChange={e => updateStockInRow(i, 'ingId', e.target.value)}
+                    style={{ fontSize: '0.88rem', width: '100%' }}
+                  >
+                    <option value="">— เลือกวัตถุดิบ —</option>
+                    {stock.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.id} — {s.name}{s.unit ? ` (${s.unit})` : ''}
+                      </option>
+                    ))}
+                  </select>
                   <input
                     type="number" min="0" placeholder="0"
                     value={row.qty}
