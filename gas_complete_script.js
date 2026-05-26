@@ -24,6 +24,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Discounts', ['id', 'name', 'type', 'value', 'categories']);
   getOrCreateSheet(ss, 'Settings', ['key', 'value']);
   getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
+  getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'productName', 'qty', 'note', 'staff']);
 }
 
 // ──────────────────────────────────────────────
@@ -77,6 +78,7 @@ function doGet(e) {
   }
 
   // ── BOM actions ──
+  if (action === 'getLiquorRecords') return _bomJson({ success: true, records: getSheetDataAsObjects(ss, 'LiquorStorage') });
   if (action === 'getStock')       return _bomJson(getStockLevels());
   if (action === 'getIngredients') return _bomJson(getIngredientsList());
 
@@ -342,6 +344,12 @@ function doPost(e) {
         c.hasDining!==false
       ]);
     });
+    return _bomJson({ success: true });
+  }
+
+  if (action === 'saveLiquorRecord') {
+    var sh = getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'productName', 'qty', 'note', 'staff']);
+    sh.appendRow([new Date().toISOString(), postData.type || 'ฝาก', postData.customerName || '', postData.productName || '', Number(postData.qty) || 0, postData.note || '', postData.staff || '']);
     return _bomJson({ success: true });
   }
 

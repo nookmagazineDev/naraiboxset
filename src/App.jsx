@@ -19,6 +19,7 @@ import ManageBOM from './components/admin/ManageBOM';
 import TableSelection from './components/TableSelection';
 import TableOrderView from './components/TableOrderView';
 import LoginScreen from './components/LoginScreen';
+import LiquorStorage from './components/LiquorStorage';
 import './index.css';
 
 const MENU_ITEMS = [];
@@ -605,11 +606,19 @@ function App() {
         <Route path="/" element={<Navigate to="/table-select" replace />} />
 
         <Route path="/table-select" element={
-          <TableSelection
-            setGlobalTableNumber={setTableNumber}
-            lang={lang}
-            tableOrders={tableOrders}
-          />
+          <div style={{ position: 'relative' }}>
+            <TableSelection
+              setGlobalTableNumber={setTableNumber}
+              lang={lang}
+              tableOrders={tableOrders}
+            />
+            <button
+              onClick={() => navigate('/liquor')}
+              style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 100, background: '#7c3aed', border: 'none', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(124,58,237,0.4)' }}
+            >
+              🍾 {lang === 'th' ? 'ฝาก/เบิกเหล้า' : 'Liquor Storage'}
+            </button>
+          </div>
         } />
 
         <Route path="/table-orders" element={
@@ -734,6 +743,10 @@ function App() {
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onNewOrder={() => navigate('/index')}
           />
+        } />
+
+        <Route path="/liquor" element={
+          <LiquorStorage currentUser={currentUser} lang={lang} onBack={() => navigate('/table-select')} />
         } />
 
         <Route path="/admin" element={<AdminLayout lang={lang} setLang={setLang} onLogout={handleLogout} />}>
