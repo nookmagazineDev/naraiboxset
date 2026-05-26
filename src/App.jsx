@@ -32,8 +32,10 @@ function App() {
   const [lang, setLang] = useState('th');
   const [tableNumber, setTableNumber] = useState(localStorage.getItem('table_number') || '');
 
-  // Users & Auth
-  const [users, setUsers] = useState([]);
+  // Users & Auth — seed from cache so login shows immediately without waiting for GAS
+  const [users, setUsers] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('cached_users') || '[]'); } catch { return []; }
+  });
   const [currentUser, setCurrentUser] = useState(null);
 
   const handleLogin = (user) => {
@@ -148,6 +150,7 @@ function App() {
       setTableOrders(data.tableOrders);
     }
     if (data.users && Array.isArray(data.users)) {
+      localStorage.setItem('cached_users', JSON.stringify(data.users));
       setUsers(data.users);
     }
     if (data.settings && typeof data.settings === 'object') {
