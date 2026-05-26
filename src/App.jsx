@@ -158,6 +158,10 @@ function App() {
       localStorage.setItem('printers_config', JSON.stringify(data.printers));
       window.dispatchEvent(new Event('printers_changed'));
     }
+    if (data.discounts && Array.isArray(data.discounts) && data.discounts.length > 0) {
+      localStorage.setItem('pos_discounts', JSON.stringify(data.discounts));
+      setPosDiscounts(data.discounts);
+    }
   };
 
   const fetchOrdersFromSheet = async () => {

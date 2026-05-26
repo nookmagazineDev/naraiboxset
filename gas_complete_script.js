@@ -45,6 +45,7 @@ function doGet(e) {
       tableOrders: getSheetDataAsObjects(ss, 'TableOrders'),
       users:       getSheetDataAsObjects(ss, 'Users'),
       printers:    getSheetDataAsObjects(ss, 'Printers'),
+      discounts:   getSheetDataAsObjects(ss, 'Discounts'),
       settings:    (function() {
         var sh = ss.getSheetByName('Settings');
         if (!sh) return null;
