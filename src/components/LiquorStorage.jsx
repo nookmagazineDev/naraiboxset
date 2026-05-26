@@ -8,7 +8,8 @@ const EMPTY_FORM = { customerName: '', phone: '', productName: '', qty: '', note
 const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
   const [records, setRecords]           = useState([]);
   const [loading, setLoading]           = useState(true);
-  const [modal, setModal]               = useState(null); // null | 'deposit' | 'withdraw'
+  const [modal, setModal]               = useState(null); // null | 'deposit'
+  const [confirmItem, setConfirmItem]   = useState(null); // item to withdraw
   const [form, setForm]                 = useState(EMPTY_FORM);
   const [saving, setSaving]             = useState(false);
   const [saveMsg, setSaveMsg]           = useState('');
@@ -71,21 +72,52 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
     setModal(type);
   };
 
-  const fillWithdraw = (item) => {
-    setForm({ customerName: item.customerName, productName: item.productName, qty: '', note: '' });
+  const openConfirmWithdraw = (item) => {
     setSaveMsg('');
-    setModal('withdraw');
+    setConfirmItem(item);
+  };
+
+  const handleWithdrawConfirm = async () => {
+    if (!confirmItem) return;
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      await fetch(GAS_URL, {
+        method:  'POST',
+        mode:    'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body:    JSON.stringify({
+          action:       'saveLiquorRecord',
+          type:         'เบิก',
+          customerName: confirmItem.customerName,
+          phone:        confirmItem.phone || '',
+          productName:  confirmItem.productName,
+          qty:          confirmItem.qty,
+          note:         '',
+          staff:        currentUser?.username || 'ไม่ระบุ',
+        }),
+      });
+      const newRec = {
+        timestamp:    new Date().toISOString(),
+        type:         'เบิก',
+        customerName: confirmItem.customerName,
+        phone:        confirmItem.phone || '',
+        productName:  confirmItem.productName,
+        qty:          confirmItem.qty,
+        note:         '',
+        staff:        currentUser?.username || 'ไม่ระบุ',
+      };
+      setRecords(prev => [...prev, newRec]);
+      setConfirmItem(null);
+    } catch (e) {
+      setSaveMsg('❌ บันทึกไม่สำเร็จ');
+    }
+    setSaving(false);
   };
 
   const handleSave = async () => {
     if (!form.customerName.trim() || !form.productName.trim() || !form.qty) {
       setSaveMsg('กรุณากรอกชื่อลูกค้า สินค้า และจำนวน');
-      return;
-    }
-    const type  = modal === 'deposit' ? 'ฝาก' : 'เบิก';
-    const stock_ = stockMap[`${form.customerName}||${form.productName}`];
-    if (type === 'เบิก' && (!stock_ || Number(form.qty) > stock_.qty)) {
-      setSaveMsg(`เบิกเกินจำนวนที่ฝากไว้ (คงเหลือ ${stock_?.qty ?? 0} ขวด)`);
       return;
     }
     setSaving(true);
@@ -97,7 +129,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
         headers: { 'Content-Type': 'text/plain' },
         body:    JSON.stringify({
           action:       'saveLiquorRecord',
-          type,
+          type:         'ฝาก',
           customerName: form.customerName.trim(),
           phone:        form.phone.trim(),
           productName:  form.productName.trim(),
@@ -106,10 +138,9 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
           staff:        currentUser?.username || 'ไม่ระบุ',
         }),
       });
-      // optimistic update
       const newRec = {
         timestamp:    new Date().toISOString(),
-        type,
+        type:         'ฝาก',
         customerName: form.customerName.trim(),
         phone:        form.phone.trim(),
         productName:  form.productName.trim(),
@@ -156,9 +187,6 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
         </button>
         <button onClick={() => openModal('deposit')} style={{ background: '#7c3aed', border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer', padding: '0.55rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.9rem' }}>
           <ArrowDownCircle size={17} /> {lang === 'th' ? 'ฝากใหม่' : 'Deposit'}
-        </button>
-        <button onClick={() => openModal('withdraw')} style={{ background: 'rgba(249,115,22,0.85)', border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer', padding: '0.55rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 700, fontSize: '0.9rem' }}>
-          <ArrowUpCircle size={17} /> {lang === 'th' ? 'เบิก' : 'Withdraw'}
         </button>
       </div>
 
@@ -209,7 +237,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
                       </div>
                     )}
                   </div>
-                  <button onClick={() => fillWithdraw(item)} style={{ background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.35)', borderRadius: 8, color: '#f97316', cursor: 'pointer', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
+                  <button onClick={() => openConfirmWithdraw(item)} style={{ background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.35)', borderRadius: 8, color: '#f97316', cursor: 'pointer', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 }}>
                     <ArrowUpCircle size={15} /> เบิก
                   </button>
                 </div>
@@ -262,14 +290,64 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
       </div>
 
       {/* Modal ฝาก / เบิก */}
+      {/* Confirm Withdraw Modal */}
+      {confirmItem && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }} onClick={() => setConfirmItem(null)}>
+          <div style={{ background: '#1a1a2e', border: '1px solid rgba(249,115,22,0.3)', borderRadius: 18, padding: '1.75rem', width: '100%', maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
+                <ArrowUpCircle size={20} color="#f97316" /> ยืนยันการเบิก
+              </h2>
+              <button onClick={() => setConfirmItem(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}><X size={22} /></button>
+            </div>
+
+            <div style={{ background: 'rgba(249,115,22,0.07)', border: '1px solid rgba(249,115,22,0.2)', borderRadius: 12, padding: '1.1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>ลูกค้า</span>
+                <strong style={{ color: 'white' }}>{confirmItem.customerName}</strong>
+              </div>
+              {confirmItem.phone && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.5)' }}>เบอร์โทร</span>
+                  <span style={{ color: 'rgba(255,255,255,0.7)' }}>📞 {confirmItem.phone}</span>
+                </div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem' }}>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>สินค้า</span>
+                <span style={{ color: '#a78bfa', fontWeight: 600 }}>{confirmItem.productName}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
+                <span style={{ color: 'rgba(255,255,255,0.5)' }}>จำนวนที่เบิก</span>
+                <strong style={{ color: '#f97316', fontSize: '1.1rem' }}>{confirmItem.qty} ขวด</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                <span style={{ color: 'rgba(255,255,255,0.4)' }}>พนักงาน</span>
+                <span style={{ color: '#22c55e' }}>{currentUser?.username || 'ไม่ระบุ'}</span>
+              </div>
+            </div>
+
+            {saveMsg && (
+              <div style={{ marginBottom: '0.85rem', padding: '0.65rem 0.9rem', borderRadius: 8, background: 'rgba(239,68,68,0.12)', color: '#ef4444', fontSize: '0.88rem' }}>{saveMsg}</div>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={() => setConfirmItem(null)} style={{ flex: 1, padding: '0.8rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'white', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>
+                ยกเลิก
+              </button>
+              <button onClick={handleWithdrawConfirm} disabled={saving} style={{ flex: 2, padding: '0.8rem', background: saving ? '#444' : '#ea580c', border: 'none', color: 'white', borderRadius: 10, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                <ArrowUpCircle size={17} /> {saving ? 'กำลังบันทึก...' : 'ยืนยันเบิก'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {modal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }} onClick={() => setModal(null)}>
           <div style={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 18, padding: '1.75rem', width: '100%', maxWidth: 440 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.1rem' }}>
-                {modal === 'deposit'
-                  ? <><ArrowDownCircle size={20} color="#a78bfa" /> ฝากเหล้า</>
-                  : <><ArrowUpCircle size={20} color="#f97316" /> เบิกเหล้า</>}
+                <ArrowDownCircle size={20} color="#a78bfa" /> ฝากเหล้า
               </h2>
               <button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}><X size={22} /></button>
             </div>
@@ -277,14 +355,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
                 <label style={labelStyle}>ชื่อลูกค้า *</label>
-                {modal === 'withdraw' && stock.length > 0 ? (
-                  <select value={form.customerName} onChange={e => { const c = e.target.value; setForm(f => ({ ...f, customerName: c, productName: '' })); }} style={{ ...inputStyle }}>
-                    <option value="">— เลือกลูกค้า —</option>
-                    {[...new Set(stock.map(s => s.customerName))].map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                ) : (
-                  <input style={inputStyle} placeholder="ชื่อลูกค้า" value={form.customerName} onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} />
-                )}
+                <input style={inputStyle} placeholder="ชื่อลูกค้า" value={form.customerName} onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} />
               </div>
 
               <div>
@@ -294,16 +365,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
 
               <div>
                 <label style={labelStyle}>ชื่อสินค้า / ยี่ห้อ *</label>
-                {modal === 'withdraw' && form.customerName ? (
-                  <select value={form.productName} onChange={e => setForm(f => ({ ...f, productName: e.target.value }))} style={{ ...inputStyle }}>
-                    <option value="">— เลือกสินค้า —</option>
-                    {stock.filter(s => s.customerName === form.customerName).map(s => (
-                      <option key={s.productName} value={s.productName}>{s.productName} (คงเหลือ {s.qty} ขวด)</option>
-                    ))}
-                  </select>
-                ) : (
-                  <input style={inputStyle} placeholder="เช่น Johnnie Walker Black" value={form.productName} onChange={e => setForm(f => ({ ...f, productName: e.target.value }))} />
-                )}
+                <input style={inputStyle} placeholder="เช่น Johnnie Walker Black" value={form.productName} onChange={e => setForm(f => ({ ...f, productName: e.target.value }))} />
               </div>
 
               <div>
@@ -327,8 +389,8 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
               </div>
             )}
 
-            <button onClick={handleSave} disabled={saving} style={{ width: '100%', marginTop: '1.25rem', padding: '0.85rem', border: 'none', borderRadius: 12, cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '1rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', background: saving ? '#444' : modal === 'deposit' ? '#7c3aed' : '#ea580c', color: 'white' }}>
-              <Save size={18} /> {saving ? 'กำลังบันทึก...' : modal === 'deposit' ? 'บันทึกฝากเหล้า' : 'บันทึกเบิกเหล้า'}
+            <button onClick={handleSave} disabled={saving} style={{ width: '100%', marginTop: '1.25rem', padding: '0.85rem', border: 'none', borderRadius: 12, cursor: saving ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '1rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', background: saving ? '#444' : '#7c3aed', color: 'white' }}>
+              <Save size={18} /> {saving ? 'กำลังบันทึก...' : 'บันทึกฝากเหล้า'}
             </button>
           </div>
         </div>
