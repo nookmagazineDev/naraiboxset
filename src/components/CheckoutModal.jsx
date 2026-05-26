@@ -36,8 +36,12 @@ const CheckoutModal = ({
   const change = cashAmount - grand;
 
   const handleConfirmPayment = (method) => {
-    setPaymentStep('success');
-    setTimeout(() => onComplete(grand, method), 4500);
+    if (method === 'เงินสด') {
+      onComplete(grand, method);
+    } else {
+      setPaymentStep('success');
+      setTimeout(() => onComplete(grand, method), 4500);
+    }
   };
 
   const PriceBreakdown = ({ compact = false }) => (
