@@ -21,6 +21,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Promotions', ['id', 'name', 'nameEn', 'price', 'origPrice']);
   getOrCreateSheet(ss, 'TableOrders', ['TableNumber', 'SessionId', 'ItemName', 'ItemNameEn', 'ItemPrice', 'Quantity', 'Options', 'Timestamp', 'Status', 'RecordedBy']);
   getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout']);
+  getOrCreateSheet(ss, 'Discounts', ['id', 'name', 'type', 'value', 'categories']);
 }
 
 // ──────────────────────────────────────────────
@@ -328,6 +329,16 @@ function doPost(e) {
       ]);
     });
     return _bomJson({ success: true });
+  }
+
+  if (action === 'saveDiscounts') {
+    var sheet = getOrCreateSheet(ss, 'Discounts', ['id', 'name', 'type', 'value', 'categories']);
+    sheet.clearContents();
+    sheet.appendRow(['id', 'name', 'type', 'value', 'categories']);
+    (postData.discounts || []).forEach(function(d) {
+      sheet.appendRow([d.id || '', d.name || '', d.type || '', d.value || 0, JSON.stringify(d.categories || [])]);
+    });
+    return _bomJson({ success: true, saved: (postData.discounts || []).length });
   }
 
   if (action === 'saveUsers') {

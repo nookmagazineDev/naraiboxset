@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Percent, Tag } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
+
 const ManageDiscounts = () => {
   const { lang } = useOutletContext();
   const [discounts, setDiscounts] = useState([]);
@@ -25,6 +27,12 @@ const ManageDiscounts = () => {
     setDiscounts(newList);
     localStorage.setItem('pos_discounts', JSON.stringify(newList));
     window.dispatchEvent(new Event('pos_discounts_changed'));
+    fetch(GAS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'saveDiscounts', discounts: newList })
+    }).catch(console.error);
   };
 
   const handleAddNew = () => {
