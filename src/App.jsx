@@ -152,7 +152,7 @@ function App() {
     }
     if (data.settings && typeof data.settings === 'object') {
       localStorage.setItem('pos_settings', JSON.stringify(data.settings));
-      window.dispatchEvent(new Event('pos_settings_changed'));
+      setPosSettings(data.settings);
     }
     if (data.printers && Array.isArray(data.printers) && data.printers.length > 0) {
       localStorage.setItem('printers_config', JSON.stringify(data.printers));
