@@ -398,6 +398,32 @@ function doPost(e) {
     return _bomJson({ success: true, message: 'All data cleared' });
   }
 
+  // ── Ingredient actions ──
+  if (action === 'upsertIngredient') {
+    var sh = ss.getSheetByName('วัตถุดิบ');
+    if (!sh) return _bomJson({ success: false, error: 'ไม่พบชีท วัตถุดิบ — กรุณารัน setupBOM() ก่อน' });
+    var ing = postData.ingredient || {};
+    var data = sh.getDataRange().getValues();
+    var foundIdx = -1;
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(ing.id)) { foundIdx = i + 1; break; }
+    }
+    var row = [ing.id||'', ing.name||'', ing.nameEn||'', ing.unit||'', Number(ing.minStock)||0, Number(ing.costPerUnit)||0, ing.category||'', ing.note||''];
+    if (foundIdx !== -1) sh.getRange(foundIdx, 1, 1, row.length).setValues([row]);
+    else sh.appendRow(row);
+    return _bomJson({ success: true });
+  }
+
+  if (action === 'deleteIngredient') {
+    var sh = ss.getSheetByName('วัตถุดิบ');
+    if (!sh) return _bomJson({ success: false, error: 'ไม่พบชีท วัตถุดิบ — กรุณารัน setupBOM() ก่อน' });
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(postData.id)) { sh.deleteRow(i + 1); return _bomJson({ success: true }); }
+    }
+    return _bomJson({ success: false, error: 'ไม่พบวัตถุดิบ' });
+  }
+
   // ── BOM actions ──
   if (action === 'deductStock') return _bomJson(deductStock(postData));
   if (action === 'stockIn')     return _bomJson(recordStockIn(postData));

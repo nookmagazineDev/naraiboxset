@@ -170,11 +170,18 @@ const ManageBOM = () => {
 
   // ─── Ingredient CRUD ─────────────────────────────────────────────────────
   const saveIngredient = (ing) => {
-    const newList = ingredients.find(i => i.id === ing.id)
-      ? ingredients.map(i => i.id === ing.id ? ing : i)
-      : [...ingredients, { ...ing, id: ing.id || `ING-${Date.now()}` }];
+    const normalized = { ...ing, id: ing.id || `ING-${Date.now()}` };
+    const newList = ingredients.find(i => i.id === normalized.id)
+      ? ingredients.map(i => i.id === normalized.id ? normalized : i)
+      : [...ingredients, normalized];
     setIngredients(newList);
     localStorage.setItem('bom_ingredients', JSON.stringify(newList));
+    fetch(GAS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'upsertIngredient', ingredient: normalized })
+    }).catch(console.error);
     setEditingIng(null);
   };
 
@@ -183,6 +190,12 @@ const ManageBOM = () => {
     const newList = ingredients.filter(i => i.id !== id);
     setIngredients(newList);
     localStorage.setItem('bom_ingredients', JSON.stringify(newList));
+    fetch(GAS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'deleteIngredient', id })
+    }).catch(console.error);
   };
 
   // ─── UI helpers ──────────────────────────────────────────────────────────
