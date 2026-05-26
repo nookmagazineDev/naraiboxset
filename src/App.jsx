@@ -205,16 +205,24 @@ function App() {
   };
 
   const fetchOrdersFromSheet = async () => {
-    // Always fetch fresh from GAS — don't pre-load stale cache
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000); // timeout 15 วิ
     try {
-      const resp = await fetch(GAS_URL + '?action=getAllData');
+      const resp = await fetch(GAS_URL + '?action=getAllData', { signal: controller.signal });
+      clearTimeout(timer);
       const data = await resp.json();
       if (data) {
         localStorage.setItem('gas_all_data', JSON.stringify(data));
         processAppGASData(data);
       }
     } catch (e) {
-      console.error('Error fetching from GAS:', e);
+      clearTimeout(timer);
+      if (e.name !== 'AbortError') console.error('Error fetching from GAS:', e);
+      // ถ้า cache มีอยู่แล้ว ให้ใช้ cache แสดงแทน
+      const cached = localStorage.getItem('gas_all_data');
+      if (cached) {
+        try { processAppGASData(JSON.parse(cached)); } catch {}
+      }
     }
   };
 
@@ -662,6 +670,7 @@ function App() {
         onLogin={handleLogin}
         lang={lang}
         isOfflineMode={users.length === 0}
+        onRetry={fetchOrdersFromSheet}
       />
     );
   }
