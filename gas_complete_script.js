@@ -23,6 +23,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout']);
   getOrCreateSheet(ss, 'Discounts', ['id', 'name', 'type', 'value', 'categories']);
   getOrCreateSheet(ss, 'Settings', ['key', 'value']);
+  getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
 }
 
 // ──────────────────────────────────────────────
@@ -42,6 +43,7 @@ function doGet(e) {
       promotions:  getSheetDataAsObjects(ss, 'Promotions'),
       tableOrders: getSheetDataAsObjects(ss, 'TableOrders'),
       users:       getSheetDataAsObjects(ss, 'Users'),
+      printers:    getSheetDataAsObjects(ss, 'Printers'),
       settings:    (function() {
         var sh = ss.getSheetByName('Settings');
         if (!sh) return null;
@@ -341,6 +343,16 @@ function doPost(e) {
       ]);
     });
     return _bomJson({ success: true });
+  }
+
+  if (action === 'savePrinters') {
+    var sheet = getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
+    sheet.clearContents();
+    sheet.appendRow(['id', 'name', 'ip', 'type']);
+    (postData.printers || []).forEach(function(p) {
+      sheet.appendRow([p.id || '', p.name || '', p.ip || '', p.type || '']);
+    });
+    return _bomJson({ success: true, saved: (postData.printers || []).length });
   }
 
   if (action === 'saveSettings') {

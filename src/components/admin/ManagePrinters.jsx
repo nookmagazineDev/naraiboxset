@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Printer, Save, CheckCircle, XCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
 
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
+
 const PRINTER_TYPES = [
   { value: 'kitchen', label: 'ครัว (Kitchen)' },
   { value: 'bar', label: 'บาร์ (Bar)' },
@@ -35,6 +37,12 @@ const ManagePrinters = () => {
   const handleSave = () => {
     localStorage.setItem('printers_config', JSON.stringify(printers));
     window.dispatchEvent(new Event('printers_changed'));
+    fetch(GAS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'savePrinters', printers })
+    }).catch(console.error);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
