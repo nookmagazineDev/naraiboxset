@@ -25,6 +25,8 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Settings', ['key', 'value']);
   getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
   getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'phone', 'productName', 'qty', 'note', 'staff']);
+  getOrCreateSheet(ss, 'Shifts', ['id', 'openTime', 'closeTime', 'openStaff', 'closeStaff', 'openCash', 'closeCash', 'totalSales', 'totalCash', 'totalCard', 'totalTransfer', 'totalOrders', 'status', 'note']);
+  getOrCreateSheet(ss, 'PaymentSummary', ['timestamp', 'orderNumber', 'tableNo', 'paymentMethod', 'grandTotal', 'staff', 'shiftId']);
 }
 
 // ──────────────────────────────────────────────
@@ -80,8 +82,38 @@ function doGet(e) {
 
   // ── BOM actions ──
   if (action === 'getLiquorRecords') return _bomJson({ success: true, records: getSheetDataAsObjects(ss, 'LiquorStorage') });
-  if (action === 'getStock')       return _bomJson(getStockLevels());
-  if (action === 'getIngredients') return _bomJson(getIngredientsList());
+  if (action === 'getStock')         return _bomJson(getStockLevels());
+  if (action === 'getIngredients')   return _bomJson(getIngredientsList());
+  if (action === 'getShifts')        return _bomJson({ success: true, shifts: getSheetDataAsObjects(ss, 'Shifts') });
+
+  if (action === 'getReportData') {
+    var from = (e && e.parameter && e.parameter.from) ? e.parameter.from : '';
+    var to   = (e && e.parameter && e.parameter.to)   ? e.parameter.to   : '';
+    var fromDate = from ? new Date(from) : null;
+    var toDate   = to   ? new Date(to + 'T23:59:59')  : null;
+
+    var filterByDate = function(rows, tsField) {
+      if (!fromDate && !toDate) return rows;
+      return rows.filter(function(r) {
+        if (!r[tsField]) return true;
+        var d = new Date(r[tsField]);
+        if (fromDate && d < fromDate) return false;
+        if (toDate   && d > toDate)   return false;
+        return true;
+      });
+    };
+
+    var allOrders   = getSheetDataAsObjects(ss, 'Orders');
+    var allPayments = getSheetDataAsObjects(ss, 'PaymentSummary');
+    var allShifts   = getSheetDataAsObjects(ss, 'Shifts');
+
+    return _bomJson({
+      success:  true,
+      orders:   filterByDate(allOrders,   'Timestamp'),
+      payments: filterByDate(allPayments, 'timestamp'),
+      shifts:   allShifts
+    });
+  }
 
   return _bomJson({ error: 'Unknown GET action' });
 }
@@ -437,6 +469,56 @@ function doPost(e) {
   if (action === 'deductStock') return _bomJson(deductStock(postData));
   if (action === 'stockIn')     return _bomJson(recordStockIn(postData));
   if (action === 'saveBOM')     return _bomJson(saveBOM(postData));
+
+  // ── SHIFT actions ──
+  if (action === 'openShift') {
+    var sh = getOrCreateSheet(ss, 'Shifts', ['id','openTime','closeTime','openStaff','closeStaff','openCash','closeCash','totalSales','totalCash','totalCard','totalTransfer','totalOrders','status','note']);
+    var shiftId = 'SHIFT-' + Date.now();
+    sh.appendRow([shiftId, new Date().toISOString(), '', postData.staff||'', '', Number(postData.openCash)||0, 0, 0, 0, 0, 0, 0, 'open', '']);
+    return _bomJson({ success: true, shiftId: shiftId });
+  }
+
+  if (action === 'closeShift') {
+    var sh = ss.getSheetByName('Shifts');
+    if (!sh) return _bomJson({ success: false, error: 'ไม่พบชีท Shifts' });
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === String(postData.shiftId)) {
+        sh.getRange(i+1, 3).setValue(new Date().toISOString());
+        sh.getRange(i+1, 5).setValue(postData.staff || '');
+        sh.getRange(i+1, 7).setValue(Number(postData.closeCash) || 0);
+        sh.getRange(i+1, 8).setValue(Number(postData.totalSales) || 0);
+        sh.getRange(i+1, 9).setValue(Number(postData.totalCash) || 0);
+        sh.getRange(i+1, 10).setValue(Number(postData.totalCard) || 0);
+        sh.getRange(i+1, 11).setValue(Number(postData.totalTransfer) || 0);
+        sh.getRange(i+1, 12).setValue(Number(postData.totalOrders) || 0);
+        sh.getRange(i+1, 13).setValue('closed');
+        sh.getRange(i+1, 14).setValue(postData.note || '');
+        return _bomJson({ success: true });
+      }
+    }
+    return _bomJson({ success: false, error: 'ไม่พบกะ' });
+  }
+
+  if (action === 'savePaymentRecord') {
+    var sh = getOrCreateSheet(ss, 'PaymentSummary', ['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId']);
+    sh.appendRow([new Date().toISOString(), postData.orderNumber||'', postData.tableNo||'', postData.paymentMethod||'', Number(postData.grandTotal)||0, postData.staff||'', postData.shiftId||'']);
+    return _bomJson({ success: true });
+  }
+
+  if (action === 'cancelOrder') {
+    var sheet = ss.getSheetByName('Orders');
+    if (!sheet) return _bomJson({ success: false });
+    var data = sheet.getDataRange().getValues();
+    var updated = false;
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][1]) === String(postData.orderNumber)) {
+        sheet.getRange(i+1, 9).setValue('cancelled');
+        updated = true;
+      }
+    }
+    return _bomJson({ success: updated });
+  }
 
   return _bomJson({ success: false, error: 'Unknown action' });
 }

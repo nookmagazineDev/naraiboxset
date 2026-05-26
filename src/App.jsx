@@ -20,6 +20,8 @@ import TableSelection from './components/TableSelection';
 import TableOrderView from './components/TableOrderView';
 import LoginScreen from './components/LoginScreen';
 import LiquorStorage from './components/LiquorStorage';
+import ShiftModal from './components/ShiftModal';
+import Reports from './components/admin/Reports';
 import './index.css';
 
 const MENU_ITEMS = [];
@@ -37,6 +39,41 @@ function App() {
     try { return JSON.parse(localStorage.getItem('cached_users') || '[]'); } catch { return []; }
   });
   const [currentUser, setCurrentUser] = useState(null);
+
+  // Shift state
+  const [currentShift, setCurrentShift] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('current_shift') || 'null'); } catch { return null; }
+  });
+  const [shiftSales, setShiftSales] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('shift_sales') || 'null') || { totalSales: 0, totalCash: 0, totalCard: 0, totalTransfer: 0, totalOrders: 0 }; } catch { return { totalSales: 0, totalCash: 0, totalCard: 0, totalTransfer: 0, totalOrders: 0 }; }
+  });
+  const [shiftModalMode, setShiftModalMode] = useState(null); // null | 'open' | 'close'
+
+  const handleOpenShift = async (openCash) => {
+    try {
+      const res  = await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'openShift', staff: currentUser?.username || '', openCash }) });
+    } catch (e) {}
+    const shiftId = 'SHIFT-' + Date.now();
+    const shift = { id: shiftId, openTime: new Date().toISOString(), openStaff: currentUser?.username || '', openCash };
+    const freshSales = { totalSales: 0, totalCash: 0, totalCard: 0, totalTransfer: 0, totalOrders: 0 };
+    setCurrentShift(shift);
+    setShiftSales(freshSales);
+    localStorage.setItem('current_shift', JSON.stringify(shift));
+    localStorage.setItem('shift_sales', JSON.stringify(freshSales));
+    setShiftModalMode(null);
+  };
+
+  const handleCloseShift = async (closeCash, note) => {
+    if (!currentShift) return;
+    try {
+      await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'closeShift', shiftId: currentShift.id, staff: currentUser?.username || '', closeCash, note, ...shiftSales }) });
+    } catch (e) {}
+    setCurrentShift(null);
+    setShiftSales({ totalSales: 0, totalCash: 0, totalCard: 0, totalTransfer: 0, totalOrders: 0 });
+    localStorage.removeItem('current_shift');
+    localStorage.removeItem('shift_sales');
+    setShiftModalMode(null);
+  };
 
   const handleLogin = (user) => {
     setCurrentUser(user);
@@ -381,6 +418,20 @@ function App() {
   // =============================================
   const handleCheckoutComplete = async (grandTotal, paymentMethod) => {
     const finalTotal = grandTotal || checkoutTotal;
+
+    // Update shift sales accumulator
+    setShiftSales(prev => {
+      const m = (paymentMethod || '').toLowerCase();
+      const updated = {
+        totalSales:    (prev.totalSales    || 0) + finalTotal,
+        totalOrders:   (prev.totalOrders   || 0) + 1,
+        totalCash:     (prev.totalCash     || 0) + (m.includes('สด') || m === 'cash' ? finalTotal : 0),
+        totalTransfer: (prev.totalTransfer || 0) + (m.includes('โอน') || m.includes('qr') ? finalTotal : 0),
+        totalCard:     (prev.totalCard     || 0) + (m.includes('บัตร') || m === 'card' ? finalTotal : 0),
+      };
+      localStorage.setItem('shift_sales', JSON.stringify(updated));
+      return updated;
+    });
     const nextNum = maxOrderNum + 1;
     setMaxOrderNum(nextNum);
     const newOrderNumber = `#${String(nextNum).padStart(3, '0')}`;
@@ -452,6 +503,14 @@ function App() {
     } catch (error) {
       console.error('Error clearing table orders:', error);
     }
+
+    try {
+      // Save payment record for reports
+      await fetch(GAS_URL, {
+        method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'savePaymentRecord', orderNumber: newOrderNumber, tableNo: String(tableNumber), paymentMethod, grandTotal: finalTotal, staff: currentUser?.username || '', shiftId: currentShift?.id || '' })
+      });
+    } catch (error) { console.error('Error saving payment record:', error); }
 
     try {
       // Deduct stock based on BOM
@@ -619,6 +678,14 @@ function App() {
               lang={lang}
               tableOrders={tableOrders}
             />
+            {/* Shift button */}
+            <button
+              onClick={() => setShiftModalMode(currentShift ? 'close' : 'open')}
+              style={{ position: 'fixed', bottom: '5.5rem', right: '1.5rem', zIndex: 100, background: currentShift ? 'rgba(239,68,68,0.85)' : 'rgba(34,197,94,0.85)', border: 'none', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: `0 4px 20px ${currentShift ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.35)'}` }}
+            >
+              {currentShift ? '🔴 ปิดกะ' : '🟢 เปิดกะ'}
+            </button>
+            {/* Liquor storage button */}
             <button
               onClick={() => navigate('/liquor')}
               style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 100, background: '#7c3aed', border: 'none', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(124,58,237,0.4)' }}
@@ -766,6 +833,7 @@ function App() {
           <Route path="settings" element={<ManageSettings />} />
           <Route path="bom" element={<ManageBOM />} />
           <Route path="stock" element={<ManageStock />} />
+          <Route path="reports" element={<Reports />} />
         </Route>
       </Routes>
 
@@ -789,6 +857,18 @@ function App() {
           onUpdateQuantity={handleUpdateQuantity}
           onCheckout={handleSendOrderToTable}
           settings={posSettings}
+        />
+      )}
+
+      {shiftModalMode && (
+        <ShiftModal
+          mode={shiftModalMode}
+          currentShift={currentShift}
+          shiftSales={shiftSales}
+          currentUser={currentUser}
+          onConfirmOpen={handleOpenShift}
+          onConfirmClose={handleCloseShift}
+          onClose={() => setShiftModalMode(null)}
         />
       )}
 
