@@ -149,6 +149,10 @@ function App() {
     if (data.users && Array.isArray(data.users)) {
       setUsers(data.users);
     }
+    if (data.settings && typeof data.settings === 'object') {
+      localStorage.setItem('pos_settings', JSON.stringify(data.settings));
+      window.dispatchEvent(new Event('pos_settings_changed'));
+    }
   };
 
   const fetchOrdersFromSheet = async () => {

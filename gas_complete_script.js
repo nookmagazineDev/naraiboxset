@@ -22,6 +22,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'TableOrders', ['TableNumber', 'SessionId', 'ItemName', 'ItemNameEn', 'ItemPrice', 'Quantity', 'Options', 'Timestamp', 'Status', 'RecordedBy']);
   getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout']);
   getOrCreateSheet(ss, 'Discounts', ['id', 'name', 'type', 'value', 'categories']);
+  getOrCreateSheet(ss, 'Settings', ['key', 'value']);
 }
 
 // ──────────────────────────────────────────────
@@ -40,7 +41,18 @@ function doGet(e) {
       menu:        getSheetDataAsObjects(ss, 'Menu'),
       promotions:  getSheetDataAsObjects(ss, 'Promotions'),
       tableOrders: getSheetDataAsObjects(ss, 'TableOrders'),
-      users:       getSheetDataAsObjects(ss, 'Users')
+      users:       getSheetDataAsObjects(ss, 'Users'),
+      settings:    (function() {
+        var sh = ss.getSheetByName('Settings');
+        if (!sh) return null;
+        var d = sh.getDataRange().getValues();
+        for (var i = 1; i < d.length; i++) {
+          if (d[i][0] === 'pos_settings') {
+            try { return JSON.parse(d[i][1]); } catch(e) { return null; }
+          }
+        }
+        return null;
+      })()
     };
     return _bomJson(data);
   }
@@ -328,6 +340,21 @@ function doPost(e) {
         c.hasDining!==false
       ]);
     });
+    return _bomJson({ success: true });
+  }
+
+  if (action === 'saveSettings') {
+    var sheet = getOrCreateSheet(ss, 'Settings', ['key', 'value']);
+    var data = sheet.getDataRange().getValues();
+    var found = false;
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0] === 'pos_settings') {
+        sheet.getRange(i + 1, 2).setValue(JSON.stringify(postData.settings || {}));
+        found = true;
+        break;
+      }
+    }
+    if (!found) sheet.appendRow(['pos_settings', JSON.stringify(postData.settings || {})]);
     return _bomJson({ success: true });
   }
 

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, ToggleLeft, ToggleRight, Save, Info } from 'lucide-react';
 
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
+
 const DEFAULT_SETTINGS = {
   serviceCharge: { enabled: false, rate: 10 },
   vat: { enabled: false, rate: 7 }
@@ -29,6 +31,12 @@ const ManageSettings = () => {
   const handleSave = () => {
     localStorage.setItem('pos_settings', JSON.stringify(settings));
     window.dispatchEvent(new Event('pos_settings_changed'));
+    fetch(GAS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'saveSettings', settings })
+    }).catch(console.error);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
