@@ -22,6 +22,7 @@ import LoginScreen from './components/LoginScreen';
 import LiquorStorage from './components/LiquorStorage';
 import ShiftModal from './components/ShiftModal';
 import Reports from './components/admin/Reports';
+import { resolvePopupSource, flattenPopupConfig } from './utils/popupConfig';
 import './index.css';
 
 const MENU_ITEMS = [];
@@ -195,8 +196,10 @@ function App() {
       setMaxOrderNum(prev => Math.max(prev, currentMax));
     }
     if (data.menu && Array.isArray(data.menu)) {
-      setAllMenu(data.menu);
-      setLiveMenu(data.menu.filter(m => m.isActive !== false));
+      // flatten per-item popupConfig JSON onto each menu item for the wizard
+      const flatMenu = data.menu.map(flattenPopupConfig);
+      setAllMenu(flatMenu);
+      setLiveMenu(flatMenu.filter(m => m.isActive !== false));
     }
     if (data.tableOrders && Array.isArray(data.tableOrders)) {
       setTableOrders(data.tableOrders);
@@ -290,10 +293,10 @@ function App() {
       }]);
       setIsCartOpen(true);
     } else {
-      // ถ้าหมวดไม่มีเซต popup ไว้เลย → เพิ่มลงตะกร้าทันทีโดยไม่ต้องเด้ง wizard
+      // ถ้ารายการนี้ไม่ได้เซต popup ไว้เลย → เพิ่มลงตะกร้าทันทีโดยไม่ต้องเด้ง wizard
       const cats = allCategories.length > 0 ? allCategories : categories;
-      const catConfig = cats.find(c => c.slug === food.category) || {};
-      const hasPopups = [1, 2, 3, 4, 5, 6].some(i => catConfig[`hasPopup${i}`] === true);
+      const cfg = resolvePopupSource(food, cats);
+      const hasPopups = [1, 2, 3, 4, 5, 6].some(i => cfg[`hasPopup${i}`] === true);
       if (!hasPopups) {
         handleConfirmOrder(food, {
           allPopups: [],

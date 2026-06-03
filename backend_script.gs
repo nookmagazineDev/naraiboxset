@@ -25,7 +25,7 @@ function initializeSheets() {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   getOrCreateSheet(ss, 'Orders', ['Timestamp', 'OrderNumber', 'CustomerName', 'Address', 'ItemDetail', 'DiningOption', 'Price', 'TotalAmount', 'Status', 'OrderStartTime', 'CompletionTime', 'RecordedBy']);
   getOrCreateSheet(ss, 'Categories', ['slug', 'name', 'nameEn', 'icon', 'isActive', 'hasPopup1', 'popup1Category', 'popup1Items', 'popup1Min', 'popup1Max', 'popup1ItemsMax', 'popup1Free', 'hasPopup2', 'popup2Category', 'popup2Items', 'popup2Min', 'popup2Max', 'popup2ItemsMax', 'popup2Free', 'hasPopup3', 'popup3Category', 'popup3Items', 'popup3Min', 'popup3Max', 'popup3ItemsMax', 'popup3Free', 'hasPopup4', 'popup4Category', 'popup4Items', 'popup4Min', 'popup4Max', 'popup4ItemsMax', 'popup4Free', 'hasPopup5', 'popup5Category', 'popup5Items', 'popup5Min', 'popup5Max', 'popup5ItemsMax', 'popup5Free', 'hasPopup6', 'popup6Category', 'popup6Items', 'popup6Min', 'popup6Max', 'popup6ItemsMax', 'popup6Free', 'hasDining']);
-  getOrCreateSheet(ss, 'Menu', ['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems']);
+  getOrCreateSheet(ss, 'Menu', ['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems', 'popupConfig']);
   getOrCreateSheet(ss, 'Promotions', ['id', 'name', 'nameEn', 'price', 'origPrice']);
   getOrCreateSheet(ss, 'TableOrders', ['TableNumber', 'SessionId', 'ItemName', 'ItemNameEn', 'ItemPrice', 'Quantity', 'Options', 'Timestamp', 'Status', 'RecordedBy']);
   getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout', 'isAdmin']);
@@ -285,12 +285,15 @@ function doPost(e) {
     var sheet = ss.getSheetByName('Menu');
     var item = postData.item;
     if (!item || !item.id) return ContentService.createTextOutput(JSON.stringify({"success": false})).setMimeType(ContentService.MimeType.JSON);
+    // Ensure the header includes the popupConfig column (migration for old sheets)
+    var menuHeaders = ['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems', 'popupConfig'];
+    sheet.getRange(1, 1, 1, menuHeaders.length).setValues([menuHeaders]);
     var data = sheet.getDataRange().getValues();
     var foundIndex = -1;
     for (var i = 1; i < data.length; i++) {
        if (data[i][0] == item.id) { foundIndex = i + 1; break; }
     }
-    var rowData = [item.id, item.category || 'food', item.name || '', item.nameEn || '', item.description || '', item.descriptionEn || '', item.price || 0, item.image || '', item.isActive !== false ? true : false, item.bundledItems ? JSON.stringify(item.bundledItems) : '[]'];
+    var rowData = [item.id, item.category || 'food', item.name || '', item.nameEn || '', item.description || '', item.descriptionEn || '', item.price || 0, item.image || '', item.isActive !== false ? true : false, item.bundledItems ? JSON.stringify(item.bundledItems) : '[]', item.popupConfig ? JSON.stringify(item.popupConfig) : '{}'];
     if (foundIndex !== -1) { sheet.getRange(foundIndex, 1, 1, rowData.length).setValues([rowData]); }
     else { sheet.appendRow(rowData); }
     return ContentService.createTextOutput(JSON.stringify({"success": true})).setMimeType(ContentService.MimeType.JSON);
@@ -309,10 +312,10 @@ function doPost(e) {
   if (action === 'saveMenu') {
     var sheet = ss.getSheetByName('Menu');
     sheet.clearContents();
-    sheet.appendRow(['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems']);
+    sheet.appendRow(['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems', 'popupConfig']);
     var items = postData.items || [];
     items.forEach(function(item) {
-      sheet.appendRow([item.id || Date.now(), item.category || 'food', item.name || '', item.nameEn || '', item.description || '', item.descriptionEn || '', item.price || 0, item.image || '', item.isActive !== false ? true : false, item.bundledItems ? JSON.stringify(item.bundledItems) : '[]']);
+      sheet.appendRow([item.id || Date.now(), item.category || 'food', item.name || '', item.nameEn || '', item.description || '', item.descriptionEn || '', item.price || 0, item.image || '', item.isActive !== false ? true : false, item.bundledItems ? JSON.stringify(item.bundledItems) : '[]', item.popupConfig ? JSON.stringify(item.popupConfig) : '{}']);
     });
     return ContentService.createTextOutput(JSON.stringify({"success": true})).setMimeType(ContentService.MimeType.JSON);
   }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowRight, ArrowLeft, Check } from 'lucide-react';
+import { resolvePopupSource } from '../utils/popupConfig';
 
 const DINING_OPTIONS = [
   { id: 'dine_in', name: 'ทานที่ร้าน', nameEn: 'Dine-in' },
@@ -16,9 +17,10 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
   const [selectedPopup6, setSelectedPopup6] = useState({});
   const [selectedDining, setSelectedDining] = useState(DINING_OPTIONS[0]);
 
-  const categoryConfig = categories.find(c => c.slug === food.category) || {};
+  // ดึงค่า popup จากตัวเมนูเอง (ถ้าตั้งไว้) ไม่งั้น fallback ไปที่หมวดหมู่
+  const categoryConfig = food ? resolvePopupSource(food, categories) : {};
 
-  const resolvePopupConfig = (configField, minField, categoryField, itemIdsField, fallbackFilter, freeField, maxField, itemsMaxField) => {
+  const resolvePopupConfig = (configField, minField, categoryField, itemIdsField, fallbackFilter, freeField, maxField, itemsMaxField, allowRepeatField) => {
     let slugs = [];
     if (categoryConfig[categoryField]) {
       slugs.push(categoryConfig[categoryField]);
@@ -41,15 +43,16 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
     items = items.map(m => ({ ...m, price: isFree ? 0 : m.price }));
 
     const itemsMaxMap = categoryConfig[itemsMaxField] || {};
-    return { namesTh, namesEn, items, minSelect: categoryConfig[minField] || 0, maxSelect: categoryConfig[maxField] || 0, itemsMaxMap };
+    const allowRepeat = categoryConfig[allowRepeatField] !== false; // ค่าเริ่มต้น = เลือกซ้ำได้
+    return { namesTh, namesEn, items, minSelect: categoryConfig[minField] || 0, maxSelect: categoryConfig[maxField] || 0, itemsMaxMap, allowRepeat };
   };
 
-  const pop1Config = resolvePopupConfig('hasPopup1', 'popup1Min', 'popup1Category', 'popup1Items', null, 'popup1Free', 'popup1Max', 'popup1ItemsMax');
-  const pop2Config = resolvePopupConfig('hasPopup2', 'popup2Min', 'popup2Category', 'popup2Items', null, 'popup2Free', 'popup2Max', 'popup2ItemsMax');
-  const pop3Config = resolvePopupConfig('hasPopup3', 'popup3Min', 'popup3Category', 'popup3Items', null, 'popup3Free', 'popup3Max', 'popup3ItemsMax');
-  const pop4Config = resolvePopupConfig('hasPopup4', 'popup4Min', 'popup4Category', 'popup4Items', null, 'popup4Free', 'popup4Max', 'popup4ItemsMax');
-  const pop5Config = resolvePopupConfig('hasPopup5', 'popup5Min', 'popup5Category', 'popup5Items', null, 'popup5Free', 'popup5Max', 'popup5ItemsMax');
-  const pop6Config = resolvePopupConfig('hasPopup6', 'popup6Min', 'popup6Category', 'popup6Items', null, 'popup6Free', 'popup6Max', 'popup6ItemsMax');
+  const pop1Config = resolvePopupConfig('hasPopup1', 'popup1Min', 'popup1Category', 'popup1Items', null, 'popup1Free', 'popup1Max', 'popup1ItemsMax', 'popup1AllowRepeat');
+  const pop2Config = resolvePopupConfig('hasPopup2', 'popup2Min', 'popup2Category', 'popup2Items', null, 'popup2Free', 'popup2Max', 'popup2ItemsMax', 'popup2AllowRepeat');
+  const pop3Config = resolvePopupConfig('hasPopup3', 'popup3Min', 'popup3Category', 'popup3Items', null, 'popup3Free', 'popup3Max', 'popup3ItemsMax', 'popup3AllowRepeat');
+  const pop4Config = resolvePopupConfig('hasPopup4', 'popup4Min', 'popup4Category', 'popup4Items', null, 'popup4Free', 'popup4Max', 'popup4ItemsMax', 'popup4AllowRepeat');
+  const pop5Config = resolvePopupConfig('hasPopup5', 'popup5Min', 'popup5Category', 'popup5Items', null, 'popup5Free', 'popup5Max', 'popup5ItemsMax', 'popup5AllowRepeat');
+  const pop6Config = resolvePopupConfig('hasPopup6', 'popup6Min', 'popup6Category', 'popup6Items', null, 'popup6Free', 'popup6Max', 'popup6ItemsMax', 'popup6AllowRepeat');
 
   if (!food) return null;
 
@@ -179,7 +182,8 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
           )}
           {config.items.length > 0 ? config.items.map(addon => {
             const qty = getQty(qtyMap, addon.id);
-            const perItemMax = (config.itemsMaxMap || {})[addon.id] || 0;
+            // ถ้าตั้ง "เลือกซ้ำไม่ได้" → จำกัดต่อรายการไว้ที่ 1
+            const perItemMax = config.allowRepeat === false ? 1 : ((config.itemsMaxMap || {})[addon.id] || 0);
             const itemAtMax = perItemMax > 0 && qty >= perItemMax;
             const cardDisabled = (atMax && qty === 0) || itemAtMax;
             return (

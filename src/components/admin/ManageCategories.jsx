@@ -355,84 +355,10 @@ const ManageCategories = () => {
                 </label>
               </div>
 
-              <div className="admin-form-group" style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem' }}>
-                <label>{lang === 'th' ? 'ตั้งค่าหน้าจอสั่งอาหาร (Order Wizard Steps)' : 'Order Wizard Steps'}</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem', marginTop: '0.5rem' }}>
-                  
-                  {[1, 2, 3, 4, 5, 6].map(num => {
-                    const hasPopup = editingItem[`hasPopup${num}`];
-                    const categoryProp = `popup${num}Category`;
-                    const itemsProp = `popup${num}Items`;
-                    const itemsMaxProp = `popup${num}ItemsMax`;
-                    const minProp = `popup${num}Min`;
-                    const maxProp = `popup${num}Max`;
-                    const freeProp = `popup${num}Free`;
-
-                    return (
-                      <div key={num} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
-                          <input type="checkbox" checked={hasPopup === true} onChange={e => setEditingItem({...editingItem, [`hasPopup${num}`]: e.target.checked})} style={{ width: 'auto', marginBottom: 0 }} />
-                          <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{lang === 'th' ? `แสดง Popup ${num}` : `Show Popup ${num}`}</span>
-                        </label>
-                        {hasPopup === true && (
-                          <div style={{ marginLeft: '1.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '8px' }}>
-                            <div className="admin-form-group" style={{ marginBottom: '0.5rem' }}>
-                              <label>{lang === 'th' ? 'ดึงเมนูจากหมวดหมู่:' : 'Pull items from category:'}</label>
-                              <select 
-                                value={editingItem[categoryProp] || ''} 
-                                onChange={e => setEditingItem({...editingItem, [categoryProp]: e.target.value, [itemsProp]: []})}
-                                style={{ padding: '0.5rem', width: '100%', borderRadius: '4px', background: 'var(--bg-card)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}
-                              >
-                                <option value="">{lang === 'th' ? '-- เลือกหมวดหมู่ --' : '-- Select Category --'}</option>
-                                {categories.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-                              </select>
-                            </div>
-                            <div className="admin-form-group" style={{ marginBottom: '0.5rem' }}>
-                              <label>{lang === 'th' ? 'บังคับเลือกอย่างน้อยกี่รายการ (0 = ไม่บังคับ):' : 'Min Required (0 = Optional):'}</label>
-                              <input type="number" min="0" value={editingItem[minProp] || 0} onChange={e => setEditingItem({...editingItem, [minProp]: parseInt(e.target.value) || 0})} style={{ width: '120px', padding: '0.4rem', borderRadius: '4px', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }} />
-                            </div>
-                            <div className="admin-form-group" style={{ marginBottom: '0.5rem' }}>
-                              <label>{lang === 'th' ? 'จำกัดจำนวนสูงสุด (0 = ไม่จำกัด):' : 'Max Allowed (0 = Unlimited):'}</label>
-                              <input type="number" min="0" value={editingItem[maxProp] || 0} onChange={e => setEditingItem({...editingItem, [maxProp]: parseInt(e.target.value) || 0})} style={{ width: '120px', padding: '0.4rem', borderRadius: '4px', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }} />
-                            </div>
-                            <div className="admin-form-group" style={{ marginBottom: '0.5rem' }}>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
-                                <input type="checkbox" checked={editingItem[freeProp] === true} onChange={e => setEditingItem({...editingItem, [freeProp]: e.target.checked})} style={{ width: 'auto', marginBottom: 0 }} />
-                                <span style={{ fontSize: '0.85rem' }}>{lang === 'th' ? 'ฟรี (ไม่บวกราคาเพิ่มในบิล)' : 'Free (Does not add cost)'}</span>
-                              </label>
-                            </div>
-                            {editingItem[categoryProp] && menuList.filter(m => m.category === editingItem[categoryProp]).length > 0 && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                  {lang === 'th' ? 'เลือกรายการที่จะแสดง: (หากไม่ติ๊กเลย จะแสดงทุกเมนูในหมวด)' : 'Select items to show (tick none meaning all shows):'}
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                                  {menuList.filter(m => m.category === editingItem[categoryProp]).map(item => (
-                                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
-                                      <input type="checkbox" checked={(editingItem[itemsProp] || []).includes(item.id)} onChange={() => handleItemToggle(itemsProp, item.id)} style={{ width: 'auto', margin: 0 }} />
-                                      <span style={{ flex: 1 }}>{item.name}</span>
-                                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{lang === 'th' ? 'max/รายการ:' : 'max/item:'}</span>
-                                      <input
-                                        type="number" min="0"
-                                        value={(editingItem[itemsMaxProp] || {})[item.id] || 0}
-                                        onChange={e => setEditingItem({...editingItem, [itemsMaxProp]: {...(editingItem[itemsMaxProp] || {}), [item.id]: parseInt(e.target.value) || 0}})}
-                                        style={{ width: '50px', padding: '0.2rem 0.4rem', borderRadius: '4px', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.8rem' }}
-                                      />
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
-                    <input type="checkbox" checked={editingItem.hasDining !== false} onChange={e => setEditingItem({...editingItem, hasDining: e.target.checked})} style={{ width: 'auto', marginBottom: 0 }} />
-                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{lang === 'th' ? 'แสดง ทานร้าน/ห่อกลับ' : 'Show Dining Options'}</span>
-                  </label>
-                </div>
+              <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '1rem', background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)', borderRadius: '8px', padding: '0.85rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                ℹ️ {lang === 'th'
+                  ? 'การตั้งค่าตัวเลือกตอนสั่ง (Popup) ย้ายไปอยู่ที่หน้า "จัดการเมนู" แล้ว — ตั้งค่าได้รายเมนูในส่วน "ตัวเลือกตอนสั่ง (Popup)"'
+                  : 'Order option (popup) settings have moved to the "Manage Menu" page — configure them per item under "Order Options (Popups)".'}
               </div>
 
               <button type="submit" className="admin-btn" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}>

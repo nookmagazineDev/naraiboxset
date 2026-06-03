@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Save, X, Printer, FlaskConical, ChevronRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save, X, Printer, FlaskConical, ChevronRight, SlidersHorizontal } from 'lucide-react';
 import { useOutletContext } from 'react-router-dom';
+import { emptyPopupFields, extractPopupConfig, flattenPopupConfig } from '../../utils/popupConfig';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
 
@@ -20,6 +21,7 @@ const ManageMenu = () => {
   const [ingredients, setIngredients] = useState([]);
   const [editingBom, setEditingBom] = useState([]); // BOM rows for current editing item
   const [showBom, setShowBom] = useState(false);
+  const [showPopups, setShowPopups] = useState(false); // popup (order wizard) config section
 
   useEffect(() => {
     fetchMenu();
@@ -79,7 +81,7 @@ const ManageMenu = () => {
       const data = await resp.json();
       if (data) {
         localStorage.setItem('gas_all_data', JSON.stringify(data));
-        setMenuItems(Array.isArray(data.menu) ? data.menu : []);
+        setMenuItems(Array.isArray(data.menu) ? data.menu.map(flattenPopupConfig) : []);
         setCategories(Array.isArray(data.categories) ? data.categories : []);
       }
     } catch(e) {
@@ -147,9 +149,11 @@ const ManageMenu = () => {
   };
 
   const handleEdit = (item) => {
-    setEditingItem(item);
+    // ensure popup fields exist (fall back to defaults for items never configured)
+    setEditingItem({ ...emptyPopupFields(), ...flattenPopupConfig(item) });
     setEditingBom(bomConfig[String(item.id)] || []);
     setShowBom(false);
+    setShowPopups(false);
     setIsModalOpen(true);
   };
 
@@ -165,20 +169,33 @@ const ManageMenu = () => {
       image: '',
       isActive: true,
       bundledItems: [],
-      printerId: ''
+      printerId: '',
+      ...emptyPopupFields()
     });
     setEditingBom([]);
     setShowBom(false);
+    setShowPopups(false);
     setIsModalOpen(true);
+  };
+
+  // toggle a menu item id within a popup{n}Items array field
+  const handlePopupItemToggle = (field, id) => {
+    setEditingItem(prev => {
+      const current = prev[field] || [];
+      if (current.includes(id)) return { ...prev, [field]: current.filter(i => i !== id) };
+      return { ...prev, [field]: [...current, id] };
+    });
   };
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    // bundle the flat popup fields into a single popupConfig object for storage
+    const itemToSave = { ...editingItem, popupConfig: extractPopupConfig(editingItem) };
     let updated;
-    if (menuItems.find(i => i.id === editingItem.id)) {
-      updated = menuItems.map(i => i.id === editingItem.id ? editingItem : i);
+    if (menuItems.find(i => i.id === itemToSave.id)) {
+      updated = menuItems.map(i => i.id === itemToSave.id ? itemToSave : i);
     } else {
-      updated = [...menuItems, editingItem];
+      updated = [...menuItems, itemToSave];
     }
 
     try {
@@ -188,7 +205,7 @@ const ManageMenu = () => {
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({
           action: 'upsertMenu',
-          item: editingItem
+          item: itemToSave
         })
       });
       setMenuItems(updated);
@@ -512,6 +529,128 @@ const ManageMenu = () => {
                     </div>
                   )})}
                 </div>
+              </div>
+
+              {/* ── Popup / ตัวเลือกตอนสั่ง (Order Wizard) ───────────── */}
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '1rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowPopups(v => !v)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                    background: 'none', border: 'none', color: 'white', cursor: 'pointer',
+                    fontWeight: 600, fontSize: '0.9rem', padding: 0, marginBottom: showPopups ? '1rem' : 0,
+                    width: '100%', textAlign: 'left'
+                  }}
+                >
+                  <SlidersHorizontal size={16} style={{ color: 'var(--accent)' }} />
+                  {lang === 'th' ? 'ตัวเลือกตอนสั่ง (Popup)' : 'Order Options (Popups)'}
+                  {(() => {
+                    const n = [1,2,3,4,5,6].filter(i => editingItem[`hasPopup${i}`] === true).length;
+                    return n > 0 ? (
+                      <span style={{ background: 'rgba(34,197,94,0.18)', color: '#22c55e', padding: '0.1rem 0.45rem', borderRadius: 4, fontSize: '0.73rem', fontWeight: 700 }}>
+                        {n} {lang === 'th' ? 'ป๊อปอัพ' : 'popups'}
+                      </span>
+                    ) : null;
+                  })()}
+                  <ChevronRight size={14} style={{ marginLeft: 'auto', transform: showPopups ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+
+                {showPopups && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>
+                      {lang === 'th' ? 'ตั้งค่าหน้าจอเลือกตัวเลือกของเมนูนี้โดยเฉพาะ (ย้ายมาจากหน้าหมวดหมู่)' : 'Configure the order wizard steps for this specific item.'}
+                    </p>
+                    {[1, 2, 3, 4, 5, 6].map(num => {
+                      const hasPopup = editingItem[`hasPopup${num}`];
+                      const categoryProp = `popup${num}Category`;
+                      const itemsProp = `popup${num}Items`;
+                      const itemsMaxProp = `popup${num}ItemsMax`;
+                      const minProp = `popup${num}Min`;
+                      const maxProp = `popup${num}Max`;
+                      const freeProp = `popup${num}Free`;
+                      const repeatProp = `popup${num}AllowRepeat`;
+
+                      return (
+                        <div key={num} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
+                            <input type="checkbox" checked={hasPopup === true} onChange={e => setEditingItem({ ...editingItem, [`hasPopup${num}`]: e.target.checked })} style={{ width: 'auto', marginBottom: 0 }} />
+                            <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{lang === 'th' ? `แสดง Popup ${num}` : `Show Popup ${num}`}</span>
+                          </label>
+                          {hasPopup === true && (
+                            <div style={{ marginLeft: '1.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '8px' }}>
+                              <div className="admin-form-group" style={{ marginBottom: '0.5rem' }}>
+                                <label>{lang === 'th' ? 'ดึงเมนูจากหมวดหมู่:' : 'Pull items from category:'}</label>
+                                <select
+                                  value={editingItem[categoryProp] || ''}
+                                  onChange={e => setEditingItem({ ...editingItem, [categoryProp]: e.target.value, [itemsProp]: [] })}
+                                  style={{ padding: '0.5rem', width: '100%', borderRadius: '4px', background: 'var(--bg-card)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}
+                                >
+                                  <option value="">{lang === 'th' ? '-- เลือกหมวดหมู่ --' : '-- Select Category --'}</option>
+                                  {categories.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                                </select>
+                              </div>
+                              <div className="admin-form-group" style={{ marginBottom: '0.5rem' }}>
+                                <label>{lang === 'th' ? 'บังคับเลือกอย่างน้อยกี่รายการ (0 = ไม่บังคับ):' : 'Min Required (0 = Optional):'}</label>
+                                <input type="number" min="0" value={editingItem[minProp] || 0} onChange={e => setEditingItem({ ...editingItem, [minProp]: parseInt(e.target.value) || 0 })} style={{ width: '120px', padding: '0.4rem', borderRadius: '4px', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }} />
+                              </div>
+                              <div className="admin-form-group" style={{ marginBottom: '0.5rem' }}>
+                                <label>{lang === 'th' ? 'จำกัดจำนวนสูงสุด (0 = ไม่จำกัด):' : 'Max Allowed (0 = Unlimited):'}</label>
+                                <input type="number" min="0" value={editingItem[maxProp] || 0} onChange={e => setEditingItem({ ...editingItem, [maxProp]: parseInt(e.target.value) || 0 })} style={{ width: '120px', padding: '0.4rem', borderRadius: '4px', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }} />
+                              </div>
+                              <div className="admin-form-group" style={{ marginBottom: '0.5rem' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
+                                  <input type="checkbox" checked={editingItem[freeProp] === true} onChange={e => setEditingItem({ ...editingItem, [freeProp]: e.target.checked })} style={{ width: 'auto', marginBottom: 0 }} />
+                                  <span style={{ fontSize: '0.85rem' }}>{lang === 'th' ? 'ฟรี (ไม่บวกราคาเพิ่มในบิล)' : 'Free (Does not add cost)'}</span>
+                                </label>
+                              </div>
+                              {/* เลือกซ้ำได้ / ไม่ได้ */}
+                              <div className="admin-form-group" style={{ marginBottom: '0.5rem' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
+                                  <input type="checkbox" checked={editingItem[repeatProp] !== false} onChange={e => setEditingItem({ ...editingItem, [repeatProp]: e.target.checked })} style={{ width: 'auto', marginBottom: 0 }} />
+                                  <span style={{ fontSize: '0.85rem' }}>{lang === 'th' ? 'เลือกซ้ำได้ (สั่งตัวเลือกเดิมหลายครั้ง)' : 'Allow duplicate selection'}</span>
+                                </label>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: '1.5rem' }}>
+                                  {lang === 'th' ? 'ถ้าไม่ติ๊ก = แต่ละตัวเลือกเลือกได้ครั้งเดียว' : 'Unticked = each option selectable once'}
+                                </div>
+                              </div>
+                              {editingItem[categoryProp] && menuItems.filter(m => m.category === editingItem[categoryProp]).length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                    {lang === 'th' ? 'เลือกรายการที่จะแสดง: (หากไม่ติ๊กเลย จะแสดงทุกเมนูในหมวด)' : 'Select items to show (tick none meaning all shows):'}
+                                  </div>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                    {menuItems.filter(m => m.category === editingItem[categoryProp]).map(it => (
+                                      <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                                        <input type="checkbox" checked={(editingItem[itemsProp] || []).includes(it.id)} onChange={() => handlePopupItemToggle(itemsProp, it.id)} style={{ width: 'auto', margin: 0 }} />
+                                        <span style={{ flex: 1 }}>{it.name}</span>
+                                        {editingItem[repeatProp] !== false && (
+                                          <>
+                                            <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{lang === 'th' ? 'max/รายการ:' : 'max/item:'}</span>
+                                            <input
+                                              type="number" min="0"
+                                              value={(editingItem[itemsMaxProp] || {})[it.id] || 0}
+                                              onChange={e => setEditingItem({ ...editingItem, [itemsMaxProp]: { ...(editingItem[itemsMaxProp] || {}), [it.id]: parseInt(e.target.value) || 0 } })}
+                                              style={{ width: '50px', padding: '0.2rem 0.4rem', borderRadius: '4px', background: 'rgba(0,0,0,0.3)', color: 'white', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.8rem' }}
+                                            />
+                                          </>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', marginBottom: 0 }}>
+                      <input type="checkbox" checked={editingItem.hasDining !== false} onChange={e => setEditingItem({ ...editingItem, hasDining: e.target.checked })} style={{ width: 'auto', marginBottom: 0 }} />
+                      <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{lang === 'th' ? 'แสดง ทานร้าน/ห่อกลับ' : 'Show Dining Options'}</span>
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* ── BOM / สูตรวัตถุดิบ ──────────────────────────────── */}
