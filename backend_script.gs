@@ -1,7 +1,11 @@
 // ==========================================
+// ⛔ เลิกใช้แล้ว (DEPRECATED) — อย่า Deploy ไฟล์นี้
+// ใช้ gas_complete_script.js ไฟล์เดียวแทน (รวมทุกฟีเจอร์ครบ)
+// ไฟล์นี้เป็นเวอร์ชันเก่าที่ยังไม่มี BOM/สต็อก/กะ/รายงาน/ชำระเงิน
+// ==========================================
 // สเน่ห์POS - BACKEND SCRIPT (TABLE-BASED)
 // ==========================================
-// Instructions: 
+// Instructions:
 // 1. Open your existing Google Apps Script editor.
 // 2. Erase the old code and paste this entire file in.
 // 3. Click "Deploy" -> "New Deployment" -> Execute as "Me", Access "Anyone".

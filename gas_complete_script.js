@@ -1,6 +1,11 @@
 // ==========================================
 // สเน่ห์POS - BACKEND SCRIPT (TABLE-BASED)
 // ==========================================
+// ⭐ ใช้ไฟล์นี้ไฟล์เดียวในการ Deploy บน Google Apps Script ⭐
+// (ไฟล์นี้รวมทุกอย่างแล้ว: ออเดอร์/เมนู/หมวดหมู่/ผู้ใช้ + BOM/สต็อก + กะ + รายงาน + ชำระเงิน)
+// ห้ามวางไฟล์ backend_script.gs / gas_bom_api.js / gas_bom_setup.js เพิ่ม เพราะมีฟังก์ชันชื่อซ้ำกัน
+// อัปเดตล่าสุด: รองรับ isAdmin, หมายเหตุอาหาร, popupConfig รายเมนู, ราคาหลายแบบ (prices), แยกจ่าย (splitDetail)
+// ==========================================
 
 var SHEET_ID = '1QSsVi6No7HJKqBcPiXcX_Xs1iMC9SRk6bydJ88dGNP4';
 
@@ -17,10 +22,10 @@ function initializeSheets() {
   var ss = SpreadsheetApp.openById(SHEET_ID);
   getOrCreateSheet(ss, 'Orders', ['Timestamp', 'OrderNumber', 'CustomerName', 'Address', 'ItemDetail', 'DiningOption', 'Price', 'TotalAmount', 'Status', 'OrderStartTime', 'CompletionTime', 'RecordedBy']);
   getOrCreateSheet(ss, 'Categories', ['slug', 'name', 'nameEn', 'icon', 'isActive', 'hasPopup1', 'popup1Category', 'popup1Items', 'popup1Min', 'popup1Max', 'popup1ItemsMax', 'popup1Free', 'hasPopup2', 'popup2Category', 'popup2Items', 'popup2Min', 'popup2Max', 'popup2ItemsMax', 'popup2Free', 'hasPopup3', 'popup3Category', 'popup3Items', 'popup3Min', 'popup3Max', 'popup3ItemsMax', 'popup3Free', 'hasPopup4', 'popup4Category', 'popup4Items', 'popup4Min', 'popup4Max', 'popup4ItemsMax', 'popup4Free', 'hasPopup5', 'popup5Category', 'popup5Items', 'popup5Min', 'popup5Max', 'popup5ItemsMax', 'popup5Free', 'hasPopup6', 'popup6Category', 'popup6Items', 'popup6Min', 'popup6Max', 'popup6ItemsMax', 'popup6Free', 'hasDining']);
-  getOrCreateSheet(ss, 'Menu', ['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems']);
+  getOrCreateSheet(ss, 'Menu', ['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems', 'popupConfig', 'prices']);
   getOrCreateSheet(ss, 'Promotions', ['id', 'name', 'nameEn', 'price', 'origPrice']);
   getOrCreateSheet(ss, 'TableOrders', ['TableNumber', 'SessionId', 'ItemName', 'ItemNameEn', 'ItemPrice', 'Quantity', 'Options', 'Timestamp', 'Status', 'RecordedBy']);
-  getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout']);
+  getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout', 'isAdmin']);
   getOrCreateSheet(ss, 'Discounts', ['id', 'name', 'type', 'value', 'categories']);
   getOrCreateSheet(ss, 'Settings', ['key', 'value']);
   getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
@@ -172,9 +177,11 @@ function doPost(e) {
     var recordedBy  = postData.recordedBy  || '';
     items.forEach(function(item) {
       var parts = [];
+      if (item.food && item.food.priceName) parts.push(item.food.priceName);
       if (item.spice && item.spice.name) parts.push('ความเผ็ด: ' + item.spice.name);
       if (item.allPopups && item.allPopups.length > 0) item.allPopups.forEach(function(p) { parts.push(p.name); });
       if (item.promo && item.promo.id !== 'none' && item.promo.name) parts.push(item.promo.name);
+      if (item.note && String(item.note).trim()) parts.push('📝 ' + String(item.note).trim());
       sheet.appendRow([tableNumber, sessionId, item.food.name || '', item.food.nameEn || '', Number(item.food.price) || 0, Number(item.quantity) || 1, parts.join(', '), timestamp, 'pending', recordedBy]);
     });
     return _bomJson({ success: true, sessionId: sessionId });
@@ -264,12 +271,15 @@ function doPost(e) {
     var sheet = ss.getSheetByName('Menu');
     var item = postData.item;
     if (!item || !item.id) return _bomJson({ success: false });
+    // Ensure the header includes the popupConfig/prices columns (migration for old sheets)
+    var menuHeaders = ['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems', 'popupConfig', 'prices'];
+    sheet.getRange(1, 1, 1, menuHeaders.length).setValues([menuHeaders]);
     var data = sheet.getDataRange().getValues();
     var foundIndex = -1;
     for (var i = 1; i < data.length; i++) {
       if (data[i][0] == item.id) { foundIndex = i + 1; break; }
     }
-    var rowData = [item.id, item.category || 'food', item.name || '', item.nameEn || '', item.description || '', item.descriptionEn || '', item.price || 0, item.image || '', item.isActive !== false, item.bundledItems ? JSON.stringify(item.bundledItems) : '[]'];
+    var rowData = [item.id, item.category || 'food', item.name || '', item.nameEn || '', item.description || '', item.descriptionEn || '', item.price || 0, item.image || '', item.isActive !== false, item.bundledItems ? JSON.stringify(item.bundledItems) : '[]', item.popupConfig ? JSON.stringify(item.popupConfig) : '{}', item.prices ? JSON.stringify(item.prices) : '[]'];
     if (foundIndex !== -1) sheet.getRange(foundIndex, 1, 1, rowData.length).setValues([rowData]);
     else sheet.appendRow(rowData);
     return _bomJson({ success: true });
@@ -287,9 +297,9 @@ function doPost(e) {
   if (action === 'saveMenu') {
     var sheet = ss.getSheetByName('Menu');
     sheet.clearContents();
-    sheet.appendRow(['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems']);
+    sheet.appendRow(['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems', 'popupConfig', 'prices']);
     (postData.items || []).forEach(function(item) {
-      sheet.appendRow([item.id || Date.now(), item.category || 'food', item.name || '', item.nameEn || '', item.description || '', item.descriptionEn || '', item.price || 0, item.image || '', item.isActive !== false, item.bundledItems ? JSON.stringify(item.bundledItems) : '[]']);
+      sheet.appendRow([item.id || Date.now(), item.category || 'food', item.name || '', item.nameEn || '', item.description || '', item.descriptionEn || '', item.price || 0, item.image || '', item.isActive !== false, item.bundledItems ? JSON.stringify(item.bundledItems) : '[]', item.popupConfig ? JSON.stringify(item.popupConfig) : '{}', item.prices ? JSON.stringify(item.prices) : '[]']);
     });
     return _bomJson({ success: true });
   }
@@ -424,9 +434,9 @@ function doPost(e) {
   if (action === 'saveUsers') {
     var sheet = ss.getSheetByName('Users');
     sheet.clearContents();
-    sheet.appendRow(['id', 'username', 'pin', 'canCheckout']);
+    sheet.appendRow(['id', 'username', 'pin', 'canCheckout', 'isAdmin']);
     (postData.users || []).forEach(function(u) {
-      sheet.appendRow([u.id||Date.now().toString(), u.username||'', u.pin||'', u.canCheckout!==false]);
+      sheet.appendRow([u.id||Date.now().toString(), u.username||'', u.pin||'', u.canCheckout!==false, (u.isAdmin===true || u.isAdmin==='TRUE')]);
     });
     return _bomJson({ success: true });
   }
