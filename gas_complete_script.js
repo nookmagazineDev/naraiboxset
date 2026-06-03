@@ -453,12 +453,15 @@ function doPost(e) {
     var sh = ss.getSheetByName('วัตถุดิบ');
     if (!sh) return _bomJson({ success: false, error: 'ไม่พบชีท วัตถุดิบ — กรุณารัน setupBOM() ก่อน' });
     var ing = postData.ingredient || {};
+    // migration: ensure header has หน่วยซื้อ / จำนวนหน่วยใช้ต่อหน่วยซื้อ columns
+    var ingHeaders = ['รหัสวัตถุดิบ','ชื่อวัตถุดิบ','ชื่อ (EN)','หน่วยใช้ (BOM)','สต็อกขั้นต่ำ','ต้นทุน/หน่วยใช้ (฿)','หมวดหมู่','หมายเหตุ','หน่วยซื้อ','จำนวนหน่วยใช้/1หน่วยซื้อ'];
+    sh.getRange(1, 1, 1, ingHeaders.length).setValues([ingHeaders]);
     var data = sh.getDataRange().getValues();
     var foundIdx = -1;
     for (var i = 1; i < data.length; i++) {
       if (String(data[i][0]) === String(ing.id)) { foundIdx = i + 1; break; }
     }
-    var row = [ing.id||'', ing.name||'', ing.nameEn||'', ing.unit||'', Number(ing.minStock)||0, Number(ing.costPerUnit)||0, ing.category||'', ing.note||''];
+    var row = [ing.id||'', ing.name||'', ing.nameEn||'', ing.unit||'', Number(ing.minStock)||0, Number(ing.costPerUnit)||0, ing.category||'', ing.note||'', ing.purchaseUnit||'', Number(ing.unitsPerPurchase)||1];
     if (foundIdx !== -1) sh.getRange(foundIdx, 1, 1, row.length).setValues([row]);
     else sh.appendRow(row);
     return _bomJson({ success: true });
@@ -580,6 +583,7 @@ function getStockLevels() {
       id: id, name: row[1]||'', nameEn: row[2]||'', unit: row[3]||'',
       current: Math.round(current * 100) / 100,
       minimum: minQty, price: Number(row[5]) || 0,
+      purchaseUnit: row[8]||'', unitsPerPurchase: Number(row[9])||1,
       status: current <= 0 ? 'OUT' : current <= minQty ? 'LOW' : 'OK'
     };
   });
@@ -592,7 +596,7 @@ function getIngredientsList() {
   var sh = ss.getSheetByName('วัตถุดิบ');
   if (!sh) return { success: false, error: 'ไม่พบชีท วัตถุดิบ — กรุณารัน setupBOM() ก่อน' };
   var ingredients = sh.getDataRange().getValues().slice(1).filter(function(r) { return r[0]; }).map(function(r) {
-    return { id: String(r[0]), name: r[1]||'', nameEn: r[2]||'', unit: r[3]||'', minStock: Number(r[4])||0, costPerUnit: Number(r[5])||0, category: r[6]||'' };
+    return { id: String(r[0]), name: r[1]||'', nameEn: r[2]||'', unit: r[3]||'', minStock: Number(r[4])||0, costPerUnit: Number(r[5])||0, category: r[6]||'', note: r[7]||'', purchaseUnit: r[8]||'', unitsPerPurchase: Number(r[9])||1 };
   });
   return { success: true, ingredients: ingredients };
 }
@@ -631,19 +635,34 @@ function recordStockIn(data) {
   var inSheet = ss.getSheetByName('รับวัตถุดิบ');
   var ingSheet= ss.getSheetByName('วัตถุดิบ');
   if (!inSheet || !ingSheet) return { success: false, error: 'ไม่พบชีท — กรุณารัน setupBOM() ก่อน' };
-  var ingData = ingSheet.getDataRange().getValues().slice(1);
+  var allIng = ingSheet.getDataRange().getValues();         // incl. header (for row index)
+  var ingData = allIng.slice(1);
+  // migration: ensure รับวัตถุดิบ header includes purchase columns
+  var inHeaders = ['วันที่','รหัส','ชื่อวัตถุดิบ','จำนวน (หน่วยใช้)','หน่วยใช้','ต้นทุน/หน่วยใช้ (฿)','รวมราคา (฿)','ผู้บันทึก','หมายเหตุ','จำนวนซื้อ','หน่วยซื้อ','ราคา/หน่วยซื้อ (฿)'];
+  inSheet.getRange(1, 1, 1, inHeaders.length).setValues([inHeaders]);
   var now = new Date();
   var rows = [];
   (data.items || []).forEach(function(item) {
-    var ingRow = ingData.filter(function(r) { return String(r[0]) === String(item.ingId); })[0];
-    if (!ingRow) return;
-    var price = Number(item.pricePerUnit) || Number(ingRow[5]) || 0;
-    var qty   = Number(item.qty) || 0;
-    rows.push([now, item.ingId, ingRow[1], qty, ingRow[3], price, qty * price, item.staff||'admin', item.note||'']);
+    var ingIdx = -1;
+    for (var k = 0; k < ingData.length; k++) { if (String(ingData[k][0]) === String(item.ingId)) { ingIdx = k; break; } }
+    if (ingIdx === -1) return;
+    var ingRow = ingData[ingIdx];
+    var factor = Number(ingRow[9]) || 1;                    // หน่วยใช้ ต่อ 1 หน่วยซื้อ
+    var qtyPurchase = Number(item.qty) || 0;                // จำนวนที่ซื้อ (หน่วยซื้อ)
+    // ราคาที่กรอกคือราคาต่อ "หน่วยซื้อ"; ถ้าไม่กรอกใช้ต้นทุนเดิม×factor
+    var pricePerPurchase = (item.pricePerUnit !== undefined && item.pricePerUnit !== '' && item.pricePerUnit !== null)
+      ? Number(item.pricePerUnit)
+      : (Number(ingRow[5]) || 0) * factor;
+    var usageQty  = qtyPurchase * factor;                   // แปลงเป็นหน่วยใช้เพื่อเก็บสต็อก
+    var usageCost = factor > 0 ? pricePerPurchase / factor : pricePerPurchase; // ต้นทุนต่อหน่วยใช้
+    var total     = qtyPurchase * pricePerPurchase;
+    rows.push([now, item.ingId, ingRow[1], usageQty, ingRow[3], usageCost, total, item.staff||'admin', item.note||'', qtyPurchase, ingRow[8]||'', pricePerPurchase]);
+    // อัปเดตต้นทุน/หน่วยใช้ ล่าสุดในชีทวัตถุดิบ เพื่อให้ BOM คำนวณด้วยราคาล่าสุด
+    ingSheet.getRange(ingIdx + 2, 6).setValue(Math.round(usageCost * 10000) / 10000);
   });
   if (rows.length > 0) {
     var lastRow = inSheet.getLastRow() + 1;
-    inSheet.getRange(lastRow, 1, rows.length, 9).setValues(rows);
+    inSheet.getRange(lastRow, 1, rows.length, 12).setValues(rows);
     inSheet.getRange(lastRow, 1, rows.length, 1).setNumberFormat('dd/mm/yyyy HH:mm');
   }
   return { success: true, recorded: rows.length };
@@ -668,25 +687,25 @@ function saveBOM(data) {
 function _setupIngredients(ss) {
   var sh = ss.getSheetByName('วัตถุดิบ') || ss.insertSheet('วัตถุดิบ');
   sh.clearContents(); sh.clearFormats();
-  var h = ['รหัสวัตถุดิบ','ชื่อวัตถุดิบ','ชื่อ (EN)','หน่วย','สต็อกขั้นต่ำ','ราคา/หน่วย (฿)','หมวดหมู่','หมายเหตุ'];
+  var h = ['รหัสวัตถุดิบ','ชื่อวัตถุดิบ','ชื่อ (EN)','หน่วยใช้ (BOM)','สต็อกขั้นต่ำ','ต้นทุน/หน่วยใช้ (฿)','หมวดหมู่','หมายเหตุ','หน่วยซื้อ','จำนวนหน่วยใช้/1หน่วยซื้อ'];
   sh.getRange(1,1,1,h.length).setValues([h]);
   _bomStyleHeader(sh.getRange(1,1,1,h.length), '#1a3a5c');
   var d = [
-    ['ING-001','หมูสามชั้น','Pork Belly','กรัม',500,0.08,'เนื้อสัตว์',''],
-    ['ING-002','ไก่','Chicken','กรัม',500,0.06,'เนื้อสัตว์',''],
-    ['ING-003','กุ้งสด','Shrimp','กรัม',300,0.20,'อาหารทะเล',''],
-    ['ING-004','ปลาหมึก','Squid','กรัม',300,0.15,'อาหารทะเล',''],
-    ['ING-005','ข้าวสวย','Steamed Rice','กรัม',2000,0.01,'แป้ง/ข้าว',''],
-    ['ING-006','น้ำมันพืช','Vegetable Oil','มล',500,0.03,'เครื่องปรุง',''],
-    ['ING-007','น้ำปลา','Fish Sauce','มล',200,0.05,'เครื่องปรุง',''],
-    ['ING-008','ซีอิ๊วขาว','Soy Sauce','มล',200,0.04,'เครื่องปรุง',''],
-    ['ING-009','กระเทียม','Garlic','กรัม',100,0.10,'ผัก',''],
-    ['ING-010','หอมแดง','Shallot','กรัม',100,0.08,'ผัก',''],
-    ['ING-011','พริกขี้หนู','Bird Chili','กรัม',50,0.30,'ผัก',''],
-    ['ING-012','มะนาว','Lime','ลูก',20,2.00,'ผัก',''],
-    ['ING-013','ผักชี','Cilantro','กรัม',50,0.15,'ผัก',''],
-    ['ING-014','ไข่ไก่','Egg','ฟอง',20,4.00,'โปรตีน',''],
-    ['ING-015','เส้นก๋วยเตี๋ยว','Noodles','กรัม',500,0.05,'แป้ง/ข้าว',''],
+    ['ING-001','หมูสามชั้น','Pork Belly','กรัม',500,0.08,'เนื้อสัตว์','','กก.',1000],
+    ['ING-002','ไก่','Chicken','กรัม',500,0.06,'เนื้อสัตว์','','กก.',1000],
+    ['ING-003','กุ้งสด','Shrimp','กรัม',300,0.20,'อาหารทะเล','','กก.',1000],
+    ['ING-004','ปลาหมึก','Squid','กรัม',300,0.15,'อาหารทะเล','','กก.',1000],
+    ['ING-005','ข้าวสวย','Steamed Rice','กรัม',2000,0.01,'แป้ง/ข้าว','','กก.',1000],
+    ['ING-006','น้ำมันพืช','Vegetable Oil','มล',500,0.03,'เครื่องปรุง','','ลิตร',1000],
+    ['ING-007','น้ำปลา','Fish Sauce','มล',200,0.05,'เครื่องปรุง','','ขวด',700],
+    ['ING-008','ซีอิ๊วขาว','Soy Sauce','มล',200,0.04,'เครื่องปรุง','','ขวด',700],
+    ['ING-009','กระเทียม','Garlic','กรัม',100,0.10,'ผัก','','กก.',1000],
+    ['ING-010','หอมแดง','Shallot','กรัม',100,0.08,'ผัก','','กก.',1000],
+    ['ING-011','พริกขี้หนู','Bird Chili','กรัม',50,0.30,'ผัก','','กก.',1000],
+    ['ING-012','มะนาว','Lime','ลูก',20,2.00,'ผัก','','กก.',12],
+    ['ING-013','ผักชี','Cilantro','กรัม',50,0.15,'ผัก','','กก.',1000],
+    ['ING-014','ไข่ไก่','Egg','ฟอง',20,4.00,'โปรตีน','','แผง',30],
+    ['ING-015','เส้นก๋วยเตี๋ยว','Noodles','กรัม',500,0.05,'แป้ง/ข้าว','','กก.',1000],
   ];
   sh.getRange(2,1,d.length,h.length).setValues(d);
   sh.setFrozenRows(1);
@@ -704,17 +723,17 @@ function _setupBOM(ss) {
 function _setupStockIn(ss) {
   var sh = ss.getSheetByName('รับวัตถุดิบ') || ss.insertSheet('รับวัตถุดิบ');
   sh.clearContents(); sh.clearFormats();
-  var h = ['วันที่','รหัส','ชื่อวัตถุดิบ','จำนวน','หน่วย','ราคา/หน่วย (฿)','รวมราคา (฿)','ผู้บันทึก','หมายเหตุ'];
+  var h = ['วันที่','รหัส','ชื่อวัตถุดิบ','จำนวน (หน่วยใช้)','หน่วยใช้','ต้นทุน/หน่วยใช้ (฿)','รวมราคา (฿)','ผู้บันทึก','หมายเหตุ','จำนวนซื้อ','หน่วยซื้อ','ราคา/หน่วยซื้อ (฿)'];
   sh.getRange(1,1,1,h.length).setValues([h]);
   _bomStyleHeader(sh.getRange(1,1,1,h.length), '#7b3f00');
   var today = new Date();
   var sample = [
-    [today,'ING-001','หมูสามชั้น',2000,'กรัม',0.08,160,'admin','ข้อมูลตัวอย่าง'],
-    [today,'ING-003','กุ้งสด',1000,'กรัม',0.20,200,'admin','ข้อมูลตัวอย่าง'],
-    [today,'ING-005','ข้าวสวย',5000,'กรัม',0.01,50,'admin','ข้อมูลตัวอย่าง'],
-    [today,'ING-006','น้ำมันพืช',2000,'มล',0.03,60,'admin','ข้อมูลตัวอย่าง'],
-    [today,'ING-009','กระเทียม',500,'กรัม',0.10,50,'admin','ข้อมูลตัวอย่าง'],
-    [today,'ING-014','ไข่ไก่',30,'ฟอง',4.00,120,'admin','ข้อมูลตัวอย่าง'],
+    [today,'ING-001','หมูสามชั้น',2000,'กรัม',0.08,160,'admin','ข้อมูลตัวอย่าง',2,'กก.',80],
+    [today,'ING-003','กุ้งสด',1000,'กรัม',0.20,200,'admin','ข้อมูลตัวอย่าง',1,'กก.',200],
+    [today,'ING-005','ข้าวสวย',5000,'กรัม',0.01,50,'admin','ข้อมูลตัวอย่าง',5,'กก.',10],
+    [today,'ING-006','น้ำมันพืช',2000,'มล',0.03,60,'admin','ข้อมูลตัวอย่าง',2,'ลิตร',30],
+    [today,'ING-009','กระเทียม',500,'กรัม',0.10,50,'admin','ข้อมูลตัวอย่าง',0.5,'กก.',100],
+    [today,'ING-014','ไข่ไก่',30,'ฟอง',4.00,120,'admin','ข้อมูลตัวอย่าง',1,'แผง',120],
   ];
   sh.getRange(2,1,sample.length,h.length).setValues(sample);
   sh.setFrozenRows(1);

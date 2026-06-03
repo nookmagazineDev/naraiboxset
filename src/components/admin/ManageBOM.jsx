@@ -520,7 +520,7 @@ const ManageBOM = () => {
             </div>
             <button
               className="admin-btn"
-              onClick={() => setEditingIng({ id: `ING-${Date.now()}`, name: '', nameEn: '', unit: '', minStock: 0, costPerUnit: 0, category: '' })}
+              onClick={() => setEditingIng({ id: `ING-${Date.now()}`, name: '', nameEn: '', unit: '', purchaseUnit: '', unitsPerPurchase: 1, minStock: 0, costPerUnit: 0, category: '' })}
             >
               <Plus size={16} /> เพิ่มวัตถุดิบ
             </button>
@@ -539,9 +539,10 @@ const ManageBOM = () => {
                   <tr>
                     <th>รหัส</th>
                     <th>ชื่อวัตถุดิบ</th>
-                    <th style={{ textAlign: 'center' }}>หน่วย</th>
+                    <th style={{ textAlign: 'center' }}>หน่วยใช้</th>
+                    <th style={{ textAlign: 'center' }}>หน่วยซื้อ (แปลง)</th>
                     <th style={{ textAlign: 'center' }}>สต็อกขั้นต่ำ</th>
-                    <th style={{ textAlign: 'center' }}>ราคา/หน่วย</th>
+                    <th style={{ textAlign: 'center' }}>ต้นทุน/หน่วยใช้</th>
                     <th>หมวดหมู่</th>
                     <th>จัดการ</th>
                   </tr>
@@ -559,6 +560,11 @@ const ManageBOM = () => {
                         {ing.nameEn && <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginLeft: '0.5rem' }}>{ing.nameEn}</span>}
                       </td>
                       <td style={{ textAlign: 'center' }}>{ing.unit}</td>
+                      <td style={{ textAlign: 'center', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                        {ing.purchaseUnit
+                          ? <>{ing.purchaseUnit} <span style={{ opacity: 0.6 }}>(×{Number(ing.unitsPerPurchase) || 1})</span></>
+                          : '—'}
+                      </td>
                       <td style={{ textAlign: 'center' }}>{ing.minStock}</td>
                       <td style={{ textAlign: 'center', color: 'var(--accent)', fontWeight: 700 }}>
                         ฿{parseFloat(ing.costPerUnit ?? ing.pricePerUnit ?? 0).toFixed(2)}
@@ -616,17 +622,42 @@ const ManageBOM = () => {
                 <input value={editingIng.nameEn || ''} onChange={e => setEditingIng({ ...editingIng, nameEn: e.target.value })} placeholder="Pork Belly" />
               </div>
               <div className="admin-form-group" style={{ margin: 0 }}>
-                <label style={{ fontSize: '0.82rem' }}>หน่วย</label>
+                <label style={{ fontSize: '0.82rem' }}>หน่วยใช้ (สำหรับ BOM)</label>
                 <input value={editingIng.unit || ''} onChange={e => setEditingIng({ ...editingIng, unit: e.target.value })} placeholder="กรัม, มล, ลูก..." />
               </div>
               <div className="admin-form-group" style={{ margin: 0 }}>
-                <label style={{ fontSize: '0.82rem' }}>สต็อกขั้นต่ำ</label>
+                <label style={{ fontSize: '0.82rem' }}>สต็อกขั้นต่ำ (หน่วยใช้)</label>
                 <input type="number" value={editingIng.minStock ?? ''} onChange={e => setEditingIng({ ...editingIng, minStock: e.target.value })} placeholder="500" />
               </div>
+
+              {/* ── หน่วยซื้อ + อัตราแปลง ── */}
+              <div className="admin-form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '0.82rem' }}>หน่วยซื้อ (ตอนลงซื้อของ)</label>
+                <input value={editingIng.purchaseUnit || ''} onChange={e => setEditingIng({ ...editingIng, purchaseUnit: e.target.value })} placeholder="กก., ขวด, แพ็ค..." />
+              </div>
+              <div className="admin-form-group" style={{ margin: 0 }}>
+                <label style={{ fontSize: '0.82rem' }}>1 หน่วยซื้อ = กี่หน่วยใช้</label>
+                <input type="number" step="any" min="0" value={editingIng.unitsPerPurchase ?? ''} onChange={e => setEditingIng({ ...editingIng, unitsPerPurchase: e.target.value })} placeholder="เช่น 1 กก. = 1000 กรัม" />
+              </div>
+
               <div className="admin-form-group" style={{ margin: 0, gridColumn: 'span 2' }}>
-                <label style={{ fontSize: '0.82rem' }}>ราคา/หน่วย (฿)</label>
+                <label style={{ fontSize: '0.82rem' }}>ต้นทุน/หน่วยใช้ (฿) — อัปเดตอัตโนมัติเมื่อลงซื้อของ</label>
                 <input type="number" step="any" value={editingIng.costPerUnit ?? ''} onChange={e => setEditingIng({ ...editingIng, costPerUnit: e.target.value })} placeholder="0.08" />
               </div>
+
+              {(() => {
+                const upp = Number(editingIng.unitsPerPurchase) || 0;
+                const cpu = Number(editingIng.costPerUnit) || 0;
+                if (upp > 0 && editingIng.purchaseUnit) {
+                  return (
+                    <div style={{ gridColumn: 'span 2', fontSize: '0.78rem', color: 'var(--text-muted)', background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.2)', borderRadius: 8, padding: '0.5rem 0.75rem' }}>
+                      💡 1 {editingIng.purchaseUnit} = {upp.toLocaleString()} {editingIng.unit || 'หน่วยใช้'}
+                      {cpu > 0 && <> · ต้นทุนต่อ 1 {editingIng.purchaseUnit} ≈ <strong style={{ color: '#60a5fa' }}>฿{(cpu * upp).toLocaleString(undefined, { maximumFractionDigits: 2 })}</strong></>}
+                    </div>
+                  );
+                }
+                return null;
+              })()}
             </div>
 
             <button

@@ -295,52 +295,70 @@ const ManageStock = () => {
             </div>
 
             {/* แถวหัว */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 90px 110px 1fr 36px', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 0.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 90px 120px 1fr 36px', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 0.25rem' }}>
               <span>วัตถุดิบ</span>
-              <span>จำนวน</span>
-              <span>ราคา/หน่วย ฿</span>
+              <span>จำนวน (หน่วยซื้อ)</span>
+              <span>ราคา/หน่วยซื้อ ฿</span>
               <span>หมายเหตุ</span>
               <span></span>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '320px', overflowY: 'auto', marginBottom: '1.25rem' }}>
-              {stockInForm.map((row, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 90px 110px 1fr 36px', gap: '0.5rem', alignItems: 'center' }}>
-                  <select
-                    value={row.ingId}
-                    onChange={e => updateStockInRow(i, 'ingId', e.target.value)}
-                    style={{ fontSize: '0.88rem', width: '100%' }}
-                  >
-                    <option value="">— เลือกวัตถุดิบ —</option>
-                    {stock.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.id} — {s.name}{s.unit ? ` (${s.unit})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number" min="0" placeholder="0"
-                    value={row.qty}
-                    onChange={e => updateStockInRow(i, 'qty', e.target.value)}
-                    style={{ textAlign: 'right' }}
-                  />
-                  <input
-                    type="number" min="0" step="0.01" placeholder="ใช้ค่าเดิม"
-                    value={row.pricePerUnit}
-                    onChange={e => updateStockInRow(i, 'pricePerUnit', e.target.value)}
-                    style={{ textAlign: 'right' }}
-                  />
-                  <input
-                    placeholder="หมายเหตุ"
-                    value={row.note}
-                    onChange={e => updateStockInRow(i, 'note', e.target.value)}
-                  />
-                  <button onClick={() => removeStockInRow(i)} disabled={stockInForm.length === 1}
-                    style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', borderRadius: '6px', cursor: 'pointer', padding: '0.4rem', opacity: stockInForm.length === 1 ? 0.3 : 1 }}>
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
+              {stockInForm.map((row, i) => {
+                const sel = stock.find(s => String(s.id) === String(row.ingId));
+                const factor = sel ? (Number(sel.unitsPerPurchase) || 1) : 1;
+                const qtyP = Number(row.qty) || 0;
+                const priceP = row.pricePerUnit !== '' ? Number(row.pricePerUnit) : null;
+                const usageQty = qtyP * factor;
+                const usageCost = priceP != null && factor > 0 ? priceP / factor : null;
+                const showPreview = sel && qtyP > 0;
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 90px 120px 1fr 36px', gap: '0.5rem', alignItems: 'center' }}>
+                      <select
+                        value={row.ingId}
+                        onChange={e => updateStockInRow(i, 'ingId', e.target.value)}
+                        style={{ fontSize: '0.88rem', width: '100%' }}
+                      >
+                        <option value="">— เลือกวัตถุดิบ —</option>
+                        {stock.map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.id} — {s.name}{s.purchaseUnit ? ` (ซื้อเป็น ${s.purchaseUnit})` : (s.unit ? ` (${s.unit})` : '')}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number" min="0" step="any" placeholder="0"
+                        value={row.qty}
+                        onChange={e => updateStockInRow(i, 'qty', e.target.value)}
+                        style={{ textAlign: 'right' }}
+                      />
+                      <input
+                        type="number" min="0" step="0.01" placeholder="ใช้ค่าเดิม"
+                        value={row.pricePerUnit}
+                        onChange={e => updateStockInRow(i, 'pricePerUnit', e.target.value)}
+                        style={{ textAlign: 'right' }}
+                      />
+                      <input
+                        placeholder="หมายเหตุ"
+                        value={row.note}
+                        onChange={e => updateStockInRow(i, 'note', e.target.value)}
+                      />
+                      <button onClick={() => removeStockInRow(i)} disabled={stockInForm.length === 1}
+                        style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', borderRadius: '6px', cursor: 'pointer', padding: '0.4rem', opacity: stockInForm.length === 1 ? 0.3 : 1 }}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                    {showPreview && (
+                      <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', paddingLeft: '0.25rem' }}>
+                        ➜ เข้าสต็อก <strong style={{ color: '#22c55e' }}>{usageQty.toLocaleString()} {sel.unit}</strong>
+                        {usageCost != null && <> · ต้นทุน <strong style={{ color: '#60a5fa' }}>฿{usageCost.toLocaleString(undefined, { maximumFractionDigits: 4 })}/{sel.unit}</strong></>}
+                        {sel.purchaseUnit && <span style={{ opacity: 0.7 }}> (1 {sel.purchaseUnit} = {factor.toLocaleString()} {sel.unit})</span>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <button onClick={addStockInRow} style={{ background: 'rgba(255,255,255,0.06)', border: '1px dashed rgba(255,255,255,0.2)', color: 'rgba(255,255,255,0.7)', borderRadius: '8px', padding: '0.5rem 1rem', cursor: 'pointer', width: '100%', marginBottom: '1.25rem', fontSize: '0.88rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
