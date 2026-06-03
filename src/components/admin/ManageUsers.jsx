@@ -15,7 +15,7 @@ const inp = {
   outline: 'none', boxSizing: 'border-box',
 };
 
-const EMPTY_USER = { id: '', username: '', pin: '', canCheckout: true };
+const EMPTY_USER = { id: '', username: '', pin: '', canCheckout: true, isAdmin: false };
 
 export default function ManageUsers() {
   const { lang } = useOutletContext();
@@ -165,6 +165,16 @@ export default function ManageUsers() {
                         ))}
                       </div>
                     </div>
+                    <div>
+                      <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 8 }}>สิทธิ์แอดมิน (เข้าหลังบ้าน)</label>
+                      <div style={{ display: 'flex', gap: '0.6rem' }}>
+                        {[true, false].map(val => (
+                          <button key={String(val)} onClick={() => handleChange(user.id, 'isAdmin', val)} style={{ flex: 1, padding: '0.55rem', borderRadius: 8, border: '1.5px solid', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', background: (user.isAdmin === true) === val ? (val ? 'rgba(249,115,22,0.18)' : 'rgba(255,255,255,0.04)') : 'rgba(255,255,255,0.04)', borderColor: (user.isAdmin === true) === val ? (val ? 'rgba(249,115,22,0.6)' : 'rgba(255,255,255,0.1)') : 'rgba(255,255,255,0.1)', color: (user.isAdmin === true) === val ? (val ? '#f97316' : 'rgba(255,255,255,0.4)') : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                            {val ? '👑 เป็นแอดมิน' : 'พนักงานทั่วไป'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <button onClick={() => setEditId(null)} style={{ marginTop: 4, padding: '0.65rem', background: '#ea580c', border: 'none', borderRadius: 10, color: 'white', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                       <CheckCircle size={16} /> เสร็จสิ้น
                     </button>
@@ -194,6 +204,11 @@ export default function ManageUsers() {
                         <span style={{ padding: '0.15rem 0.55rem', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, background: user.canCheckout !== false ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: user.canCheckout !== false ? '#22c55e' : '#ef4444', border: `1px solid ${user.canCheckout !== false ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, display: 'flex', alignItems: 'center', gap: 3 }}>
                           {user.canCheckout !== false ? <><ShieldCheck size={10} /> ชำระเงินได้</> : <><ShieldOff size={10} /> ไม่มีสิทธิ์ชำระ</>}
                         </span>
+                        {user.isAdmin === true && (
+                          <span style={{ padding: '0.15rem 0.55rem', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, background: 'rgba(249,115,22,0.12)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                            👑 แอดมิน
+                          </span>
+                        )}
                       </div>
                     </div>
                     {/* Actions */}
@@ -263,6 +278,16 @@ export default function ManageUsers() {
                   {[true, false].map(val => (
                     <button key={String(val)} onClick={() => setForm(f => ({ ...f, canCheckout: val }))} style={{ flex: 1, padding: '0.6rem', borderRadius: 8, border: '1.5px solid', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', background: form.canCheckout === val ? (val ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)') : 'rgba(255,255,255,0.04)', borderColor: form.canCheckout === val ? (val ? 'rgba(34,197,94,0.5)' : 'rgba(239,68,68,0.5)') : 'rgba(255,255,255,0.1)', color: form.canCheckout === val ? (val ? '#22c55e' : '#ef4444') : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
                       {val ? <><ShieldCheck size={15} /> อนุญาต</> : <><ShieldOff size={15} /> ไม่อนุญาต</>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 8 }}>สิทธิ์แอดมิน (เข้าหลังบ้าน)</label>
+                <div style={{ display: 'flex', gap: '0.6rem' }}>
+                  {[true, false].map(val => (
+                    <button key={String(val)} onClick={() => setForm(f => ({ ...f, isAdmin: val }))} style={{ flex: 1, padding: '0.6rem', borderRadius: 8, border: '1.5px solid', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', background: (form.isAdmin === true) === val && val ? 'rgba(249,115,22,0.18)' : 'rgba(255,255,255,0.04)', borderColor: (form.isAdmin === true) === val && val ? 'rgba(249,115,22,0.6)' : 'rgba(255,255,255,0.1)', color: (form.isAdmin === true) === val && val ? '#f97316' : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                      {val ? '👑 เป็นแอดมิน' : 'พนักงานทั่วไป'}
                     </button>
                   ))}
                 </div>

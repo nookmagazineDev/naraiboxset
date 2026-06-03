@@ -59,7 +59,7 @@ const AdminLayout = ({ lang, setLang }) => {
                 <Globe size={20} /> {lang === 'th' ? 'English' : 'ภาษาไทย'}
              </button>
 
-             <button className="admin-link logout" style={{ marginTop: '0.5rem' }} onClick={() => navigate('/index')}>
+             <button className="admin-link logout" style={{ marginTop: '0.5rem' }} onClick={() => navigate('/table-select')}>
                 <LogOut size={20} /> {lang === 'th' ? 'กลับสู่หน้าร้าน' : 'Exit to Storefront'}
              </button>
           </nav>

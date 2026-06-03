@@ -32,13 +32,17 @@ function App() {
   const location = useLocation();
   const [activeCategory, setActiveCategory] = useState('food');
   const [lang, setLang] = useState('th');
-  const [tableNumber, setTableNumber] = useState(localStorage.getItem('table_number') || '');
+  // ทุกครั้งที่เปิด/รีเฟรชแอป ให้เริ่มที่หน้าเลือกโต๊ะเสมอ (ไม่จำเลขโต๊ะเดิม)
+  const [tableNumber, setTableNumber] = useState('');
 
   // Users & Auth — seed from cache so login shows immediately without waiting for GAS
   const [users, setUsers] = useState(() => {
     try { return JSON.parse(localStorage.getItem('cached_users') || '[]'); } catch { return []; }
   });
   const [currentUser, setCurrentUser] = useState(null);
+
+  // สิทธิ์แอดมิน: รองรับ flag isAdmin จากชีต และเผื่อ user ชื่อ admin
+  const isAdmin = !!(currentUser && (currentUser.isAdmin === true || currentUser.isAdmin === 'TRUE' || String(currentUser.username || '').toLowerCase() === 'admin'));
 
   // Shift state
   const [currentShift, setCurrentShift] = useState(() => {
@@ -77,12 +81,23 @@ function App() {
 
   const handleLogin = (user) => {
     setCurrentUser(user);
+    // เข้าสู่ระบบใหม่ → กลับไปหน้าเลือกโต๊ะเสมอ
+    setTableNumber('');
+    navigate('/table-select', { replace: true });
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     setTableNumber('');
+    navigate('/table-select', { replace: true });
   };
+
+  // เปิด/รีเฟรชแอป → บังคับกลับหน้าเลือกโต๊ะ (รันครั้งเดียวตอน mount)
+  React.useEffect(() => {
+    setTableNumber('');
+    navigate('/table-select', { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   React.useEffect(() => {
     if (tableNumber) localStorage.setItem('table_number', tableNumber);
@@ -339,6 +354,11 @@ function App() {
     setCart(cart.filter(item => item.cartId !== cartId));
   };
 
+  // หมายเหตุอาหารต่อรายการ
+  const handleUpdateCartNote = (cartId, note) => {
+    setCart(cart.map(item => item.cartId === cartId ? { ...item, note } : item));
+  };
+
   const handleDecreaseQuantity = (food) => {
     const cartItems = cart.filter(c => c.food.id === food.id);
     if (cartItems.length > 0) {
@@ -372,6 +392,7 @@ function App() {
       if (item.spice && item.spice.name) parts.push('ความเผ็ด: ' + item.spice.name);
       if (item.allPopups && item.allPopups.length > 0) item.allPopups.forEach(p => parts.push(p.name));
       if (item.promo && item.promo.id !== 'none' && item.promo.name) parts.push(item.promo.name);
+      if (item.note && item.note.trim()) parts.push('📝 ' + item.note.trim());
       return {
         TableNumber: tableNumber,
         SessionId: sessionId,
@@ -701,6 +722,15 @@ function App() {
             >
               🍾 {lang === 'th' ? 'ฝาก/เบิกเหล้า' : 'Liquor Storage'}
             </button>
+            {/* Admin / backend button — admin only */}
+            {isAdmin && (
+              <button
+                onClick={() => navigate('/admin')}
+                style={{ position: 'fixed', bottom: '1.5rem', left: '1.5rem', zIndex: 100, background: '#1f2937', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}
+              >
+                👑 {lang === 'th' ? 'หลังบ้าน' : 'Admin'}
+              </button>
+            )}
           </div>
         } />
 
@@ -738,6 +768,9 @@ function App() {
                   </div>
                 </div>
                 <div className="pos-header-right">
+                  <button className="pos-header-btn" onClick={() => { setTableNumber(''); navigate('/table-select'); }}>
+                    🪑 {lang === 'th' ? 'เลือกโต๊ะ' : 'Tables'}
+                  </button>
                   <button className="pos-header-btn" onClick={() => navigate('/table-orders')}>
                     🧾 {lang === 'th' ? 'รายการโต๊ะ' : 'Table'}
                   </button>
@@ -832,7 +865,7 @@ function App() {
           <LiquorStorage currentUser={currentUser} lang={lang} onBack={() => navigate('/table-select')} />
         } />
 
-        <Route path="/admin" element={<AdminLayout lang={lang} setLang={setLang} onLogout={handleLogout} />}>
+        <Route path="/admin" element={isAdmin ? <AdminLayout lang={lang} setLang={setLang} onLogout={handleLogout} /> : <Navigate to="/table-select" replace />}>
           <Route index element={<Dashboard />} />
           <Route path="menu" element={<ManageMenu />} />
           <Route path="categories" element={<ManageCategories />} />
@@ -864,6 +897,7 @@ function App() {
           onClose={() => setIsCartOpen(false)}
           onRemove={handleRemoveFromCart}
           onUpdateQuantity={handleUpdateQuantity}
+          onUpdateNote={handleUpdateCartNote}
           onCheckout={handleSendOrderToTable}
           settings={posSettings}
         />

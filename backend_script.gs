@@ -28,7 +28,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Menu', ['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems']);
   getOrCreateSheet(ss, 'Promotions', ['id', 'name', 'nameEn', 'price', 'origPrice']);
   getOrCreateSheet(ss, 'TableOrders', ['TableNumber', 'SessionId', 'ItemName', 'ItemNameEn', 'ItemPrice', 'Quantity', 'Options', 'Timestamp', 'Status', 'RecordedBy']);
-  getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout']);
+  getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout', 'isAdmin']);
 }
 
 function doGet(e) {
@@ -147,6 +147,7 @@ function doPost(e) {
         item.allPopups.forEach(function(p) { parts.push(p.name); });
       }
       if (item.promo && item.promo.id !== 'none' && item.promo.name) parts.push(item.promo.name);
+      if (item.note && String(item.note).trim()) parts.push('📝 ' + String(item.note).trim());
       options = parts.join(', ');
 
       sheet.appendRow([
@@ -409,14 +410,15 @@ function doPost(e) {
   if (action === 'saveUsers') {
     var sheet = ss.getSheetByName('Users');
     sheet.clearContents();
-    sheet.appendRow(['id', 'username', 'pin', 'canCheckout']);
+    sheet.appendRow(['id', 'username', 'pin', 'canCheckout', 'isAdmin']);
     var users = postData.users || [];
     users.forEach(function(u) {
       sheet.appendRow([
         u.id || Date.now().toString(),
         u.username || '',
         u.pin || '',
-        u.canCheckout !== false ? true : false
+        u.canCheckout !== false ? true : false,
+        u.isAdmin === true || u.isAdmin === 'TRUE' ? true : false
       ]);
     });
     return ContentService.createTextOutput(JSON.stringify({"success": true})).setMimeType(ContentService.MimeType.JSON);

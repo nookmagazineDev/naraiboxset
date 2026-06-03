@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, Trash2, ShoppingBag, Plus, Minus } from 'lucide-react';
 
-const CartModal = ({ cart, onClose, onRemove, onUpdateQuantity, onCheckout, lang = 'th', settings = {} }) => {
+const CartModal = ({ cart, onClose, onRemove, onUpdateQuantity, onUpdateNote, onCheckout, lang = 'th', settings = {} }) => {
   const calculateSubtotal = () => {
     return cart.reduce((total, item) => {
       let itemTotal = Number(item.food.price);
@@ -77,6 +77,27 @@ const CartModal = ({ cart, onClose, onRemove, onUpdateQuantity, onCheckout, lang
                   </div>
 
                   <div className="cart-item-price">฿{getSubtotal(item)}</div>
+
+                  {/* หมายเหตุอาหาร — มีในทุกรายการ */}
+                  <input
+                    type="text"
+                    value={item.note || ''}
+                    onChange={(e) => onUpdateNote && onUpdateNote(item.cartId, e.target.value)}
+                    placeholder={lang === 'th' ? '📝 หมายเหตุ เช่น ไม่ใส่ผัก, เผ็ดน้อย' : '📝 Note e.g. no veggies'}
+                    style={{
+                      marginTop: '0.5rem',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '0.5rem 0.65rem',
+                      background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      borderRadius: '8px',
+                      color: 'white',
+                      fontSize: '0.85rem',
+                      fontFamily: 'inherit',
+                      outline: 'none'
+                    }}
+                  />
                 </div>
                 
                 <div className="cart-item-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
