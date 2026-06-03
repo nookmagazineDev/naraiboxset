@@ -96,7 +96,7 @@ export default function Reports() {
       orderMap[r.OrderNumber] = {
         orderNumber: r.OrderNumber, customerName: r.CustomerName,
         total: Number(r.TotalAmount) || 0, timestamp: r.Timestamp,
-        status: r.Status, paymentMethod: payMap[r.OrderNumber]?.paymentMethod || '—', staff: r.RecordedBy || '',
+        status: r.Status, paymentMethod: payMap[r.OrderNumber]?.paymentMethod || '—', splitDetail: payMap[r.OrderNumber]?.splitDetail || null, staff: r.RecordedBy || '',
       };
     }
   });
@@ -118,11 +118,19 @@ export default function Reports() {
     const day = dayStr(o.timestamp);
     if (!incomeByDay[day]) incomeByDay[day] = { day, total: 0, cash: 0, transfer: 0, card: 0, other: 0, count: 0 };
     incomeByDay[day].total += o.total; incomeByDay[day].count++;
-    const m = (o.paymentMethod || '').toLowerCase();
-    if (m.includes('สด') || m === 'cash')                                   incomeByDay[day].cash     += o.total;
-    else if (m.includes('โอน') || m.includes('qr') || m === 'transfer')     incomeByDay[day].transfer += o.total;
-    else if (m.includes('บัตร') || m === 'card')                            incomeByDay[day].card     += o.total;
-    else                                                                      incomeByDay[day].other    += o.total;
+    const sd = o.splitDetail && typeof o.splitDetail === 'object' ? o.splitDetail : null;
+    if (sd) {
+      // แยกจ่าย — กระจายตามจำนวนเงินแต่ละประเภท
+      incomeByDay[day].cash     += Number(sd.cash)     || 0;
+      incomeByDay[day].transfer += Number(sd.transfer) || 0;
+      incomeByDay[day].card     += Number(sd.card)     || 0;
+    } else {
+      const m = (o.paymentMethod || '').toLowerCase();
+      if (m.includes('สด') || m === 'cash')                                   incomeByDay[day].cash     += o.total;
+      else if (m.includes('โอน') || m.includes('qr') || m === 'transfer')     incomeByDay[day].transfer += o.total;
+      else if (m.includes('บัตร') || m === 'card')                            incomeByDay[day].card     += o.total;
+      else                                                                      incomeByDay[day].other    += o.total;
+    }
   });
   const incomeRows  = Object.values(incomeByDay).sort((a, b) => b.day.localeCompare(a.day));
   const totalSales  = incomeRows.reduce((s, r) => s + r.total, 0);

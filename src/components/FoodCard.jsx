@@ -2,7 +2,7 @@ import React from 'react';
 import { Plus, Minus } from 'lucide-react';
 
 const FoodCard = ({ food, onOrderClick, onDecreaseClick, cartQuantity = 0, lang = 'th' }) => {
-  const [imgError, setImgError] = React.useState(false);
+  const [imgType, setImgType] = React.useState('png'); // 'png' | 'svg' | 'placeholder'
   const name = lang === 'th' ? food.name : (food.nameEn || food.name);
   const desc = lang === 'th' ? food.description : (food.descriptionEn || food.description);
 
@@ -25,8 +25,28 @@ const FoodCard = ({ food, onOrderClick, onDecreaseClick, cartQuantity = 0, lang 
   };
   const folder = categoryFolders[food.category] || food.category || 'uncategorized';
   const sanitizedFileName = food.name.replace(/[\\/:*?"<>|]/g, '_').trim();
-  const localImagePath = `/images/${folder}/${sanitizedFileName}.svg`;
-  const imageSrc = food.image || localImagePath;
+
+  let imageSrc = food.image;
+  if (!imageSrc) {
+    if (imgType === 'png') {
+      imageSrc = `/images/${folder}/${sanitizedFileName}.png`;
+    } else if (imgType === 'svg') {
+      imageSrc = `/images/${folder}/${sanitizedFileName}.svg`;
+    } else {
+      imageSrc = null;
+    }
+  }
+
+  const handleImageError = () => {
+    if (food.image) {
+      food.image = null; // clear it
+      setImgType('png');
+    } else if (imgType === 'png') {
+      setImgType('svg');
+    } else if (imgType === 'svg') {
+      setImgType('placeholder');
+    }
+  };
 
   return (
     <div
@@ -34,12 +54,12 @@ const FoodCard = ({ food, onOrderClick, onDecreaseClick, cartQuantity = 0, lang 
       onClick={() => onOrderClick(food)}
     >
       <div className="pos-card-img-wrap">
-        {imageSrc && !imgError ? (
+        {imageSrc ? (
           <img 
             src={imageSrc} 
             alt={name} 
             className="pos-card-img" 
-            onError={() => setImgError(true)}
+            onError={handleImageError}
           />
         ) : (
           <div className="pos-card-img-placeholder">🍽️</div>

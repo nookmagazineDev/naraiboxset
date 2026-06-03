@@ -448,18 +448,29 @@ function App() {
   // =============================================
   // NEW: Complete payment - save to Orders, clear TableOrders
   // =============================================
-  const handleCheckoutComplete = async (grandTotal, paymentMethod) => {
+  const handleCheckoutComplete = async (grandTotal, paymentMethod, paymentDetails) => {
     const finalTotal = grandTotal || checkoutTotal;
 
     // Update shift sales accumulator
     setShiftSales(prev => {
-      const m = (paymentMethod || '').toLowerCase();
+      let addCash, addTransfer, addCard;
+      if (paymentDetails) {
+        // แยกจ่าย — กระจายตามจำนวนเงินที่ระบุแต่ละประเภท
+        addCash     = Number(paymentDetails.cash)     || 0;
+        addTransfer = Number(paymentDetails.transfer) || 0;
+        addCard     = Number(paymentDetails.card)     || 0;
+      } else {
+        const m = (paymentMethod || '').toLowerCase();
+        addCash     = (m.includes('สด') || m === 'cash') ? finalTotal : 0;
+        addTransfer = (m.includes('โอน') || m.includes('qr')) ? finalTotal : 0;
+        addCard     = (m.includes('บัตร') || m === 'card') ? finalTotal : 0;
+      }
       const updated = {
         totalSales:    (prev.totalSales    || 0) + finalTotal,
         totalOrders:   (prev.totalOrders   || 0) + 1,
-        totalCash:     (prev.totalCash     || 0) + (m.includes('สด') || m === 'cash' ? finalTotal : 0),
-        totalTransfer: (prev.totalTransfer || 0) + (m.includes('โอน') || m.includes('qr') ? finalTotal : 0),
-        totalCard:     (prev.totalCard     || 0) + (m.includes('บัตร') || m === 'card' ? finalTotal : 0),
+        totalCash:     (prev.totalCash     || 0) + addCash,
+        totalTransfer: (prev.totalTransfer || 0) + addTransfer,
+        totalCard:     (prev.totalCard     || 0) + addCard,
       };
       localStorage.setItem('shift_sales', JSON.stringify(updated));
       return updated;
@@ -540,7 +551,7 @@ function App() {
       // Save payment record for reports
       await fetch(GAS_URL, {
         method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'savePaymentRecord', orderNumber: newOrderNumber, tableNo: String(tableNumber), paymentMethod, grandTotal: finalTotal, staff: currentUser?.username || '', shiftId: currentShift?.id || '' })
+        body: JSON.stringify({ action: 'savePaymentRecord', orderNumber: newOrderNumber, tableNo: String(tableNumber), paymentMethod, grandTotal: finalTotal, staff: currentUser?.username || '', shiftId: currentShift?.id || '', splitDetail: paymentDetails ? JSON.stringify(paymentDetails) : '' })
       });
     } catch (error) { console.error('Error saving payment record:', error); }
 

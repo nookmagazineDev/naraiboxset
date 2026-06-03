@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CheckCircle, ArrowLeft, CreditCard, Banknote, Smartphone, Tag, ChevronRight } from 'lucide-react';
+import { X, CheckCircle, ArrowLeft, CreditCard, Banknote, Smartphone, Tag, ChevronRight, Split } from 'lucide-react';
 
 const calcCharges = (subtotal, settings = {}, discount = null) => {
   let discountAmount = 0;
@@ -28,12 +28,25 @@ const CheckoutModal = ({
   const [cashInput, setCashInput] = useState('');
   const [selectedDiscount, setSelectedDiscount] = useState(null);
 
+  // แยกจ่าย (split payment)
+  const [splitCash, setSplitCash] = useState('');
+  const [splitTransfer, setSplitTransfer] = useState('');
+  const [splitCard, setSplitCard] = useState('');
+
   const { subtotal, discountAmount, afterDiscount, sc, vat, grand } = calcCharges(total, settings, selectedDiscount);
   const hasCharges = sc > 0 || vat > 0;
   const hasDiscount = discountAmount > 0;
 
   const cashAmount = parseFloat(cashInput) || 0;
   const change = cashAmount - grand;
+
+  // split helpers
+  const splitCashN = parseFloat(splitCash) || 0;
+  const splitTransferN = parseFloat(splitTransfer) || 0;
+  const splitCardN = parseFloat(splitCard) || 0;
+  const splitSum = Math.round((splitCashN + splitTransferN + splitCardN) * 100) / 100;
+  const splitRemaining = Math.round((grand - splitSum) * 100) / 100;
+  const splitValid = splitRemaining === 0 && splitSum > 0 && [splitCashN, splitTransferN, splitCardN].filter(v => v > 0).length >= 2;
 
   const handleConfirmPayment = (method) => {
     if (method === 'เงินสด') {
@@ -42,6 +55,13 @@ const CheckoutModal = ({
       setPaymentStep('success');
       setTimeout(() => onComplete(grand, method), 4500);
     }
+  };
+
+  const handleConfirmSplit = () => {
+    if (!splitValid) return;
+    const details = { cash: splitCashN, transfer: splitTransferN, card: splitCardN };
+    setPaymentStep('success');
+    setTimeout(() => onComplete(grand, 'แยกจ่าย', details), 4500);
   };
 
   const PriceBreakdown = ({ compact = false }) => (
@@ -329,7 +349,107 @@ const CheckoutModal = ({
                   <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>{lang === 'th' ? 'รูดบัตร EDC ที่เคาน์เตอร์' : 'Swipe card at the counter'}</div>
                 </div>
               </button>
+
+              {/* แยกจ่าย */}
+              <button
+                onClick={() => { setSplitCash(''); setSplitTransfer(''); setSplitCard(''); setPaymentStep('split'); }}
+                style={{ display: 'flex', alignItems: 'center', gap: '1rem', background: 'rgba(168,85,247,0.07)', border: '1.5px solid rgba(168,85,247,0.25)', borderRadius: '14px', padding: '1rem 1.25rem', color: 'white', cursor: 'pointer', textAlign: 'left', transition: 'all 0.18s', fontFamily: 'inherit', width: '100%' }}
+                onMouseOver={e => e.currentTarget.style.background = 'rgba(168,85,247,0.15)'}
+                onMouseOut={e => e.currentTarget.style.background = 'rgba(168,85,247,0.07)'}
+              >
+                <div style={{ background: 'rgba(168,85,247,0.15)', borderRadius: '50%', padding: '0.6rem', flexShrink: 0 }}>
+                  <Split size={28} color="#a855f7" />
+                </div>
+                <div>
+                  <div style={{ fontWeight: '700', fontSize: '1rem', marginBottom: '2px' }}>{lang === 'th' ? 'แยกจ่าย (หลายวิธี)' : 'Split Payment'}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>{lang === 'th' ? 'ระบุจำนวนเงินแต่ละประเภท' : 'Specify amount per method'}</div>
+                </div>
+              </button>
             </div>
+          </>
+        )}
+
+        {/* ── Step 3d: แยกจ่าย ── */}
+        {paymentStep === 'split' && (
+          <>
+            <div className="modal-header">
+              <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Split size={22} color="#a855f7" /> {lang === 'th' ? 'แยกจ่าย' : 'Split Payment'}
+              </h2>
+              <button className="close-btn" onClick={() => setPaymentStep('payment_method')}><ArrowLeft size={22} /></button>
+            </div>
+
+            <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.3rem' }}>{lang === 'th' ? 'ยอดที่ต้องชำระ' : 'Amount Due'}</p>
+              <div style={{ fontSize: '2.2rem', fontWeight: '900', color: '#fbbf24', lineHeight: 1 }}>฿{grand.toLocaleString()}</div>
+            </div>
+
+            {/* inputs */}
+            {[
+              { key: 'cash', label: lang === 'th' ? 'เงินสด' : 'Cash', icon: <Banknote size={20} color="#22c55e" />, color: '#22c55e', val: splitCash, set: setSplitCash },
+              { key: 'transfer', label: lang === 'th' ? 'เงินโอน / QR' : 'Transfer / QR', icon: <Smartphone size={20} color="#60a5fa" />, color: '#60a5fa', val: splitTransfer, set: setSplitTransfer },
+              { key: 'card', label: lang === 'th' ? 'บัตรเครดิต' : 'Card', icon: <CreditCard size={20} color="#fbbf24" />, color: '#fbbf24', val: splitCard, set: setSplitCard },
+            ].map(row => (
+              <div key={row.key} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: '130px' }}>
+                  <div style={{ background: `${row.color}22`, borderRadius: '50%', padding: '0.4rem', display: 'flex' }}>{row.icon}</div>
+                  <span style={{ fontWeight: '600', fontSize: '0.9rem' }}>{row.label}</span>
+                </div>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <span style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontWeight: '700' }}>฿</span>
+                  <input
+                    type="number" min="0" step="1" placeholder="0"
+                    value={row.val} onChange={e => row.set(e.target.value)}
+                    style={{ width: '100%', padding: '0.7rem 0.75rem 0.7rem 1.6rem', background: 'rgba(0,0,0,0.3)', border: `2px solid ${row.color}55`, borderRadius: '10px', color: 'white', fontSize: '1.15rem', fontWeight: '700', textAlign: 'right', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <button
+                  onClick={() => row.set(String(Math.max(0, splitRemaining + (parseFloat(row.val) || 0))))}
+                  title={lang === 'th' ? 'เติมส่วนที่เหลือ' : 'Fill remaining'}
+                  style={{ background: `${row.color}22`, border: `1px solid ${row.color}55`, borderRadius: '8px', color: row.color, cursor: 'pointer', padding: '0.5rem 0.6rem', fontSize: '0.75rem', fontWeight: '700', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                >
+                  {lang === 'th' ? 'ที่เหลือ' : 'Rest'}
+                </button>
+              </div>
+            ))}
+
+            {/* running total */}
+            <div style={{
+              background: splitRemaining === 0 ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${splitRemaining === 0 ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.08)'}`,
+              borderRadius: '12px', padding: '0.85rem 1rem', margin: '1rem 0 1.25rem',
+              display: 'flex', flexDirection: 'column', gap: '0.35rem'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', color: 'rgba(255,255,255,0.65)' }}>
+                <span>{lang === 'th' ? 'รวมที่กรอก' : 'Entered'}</span>
+                <span style={{ fontWeight: '700', color: 'white' }}>฿{splitSum.toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.95rem', fontWeight: '800', color: splitRemaining === 0 ? '#22c55e' : (splitRemaining < 0 ? '#ef4444' : '#fbbf24') }}>
+                <span>
+                  {splitRemaining === 0
+                    ? (lang === 'th' ? 'ครบพอดี ✓' : 'Balanced ✓')
+                    : splitRemaining > 0
+                      ? (lang === 'th' ? 'ยังขาด' : 'Remaining')
+                      : (lang === 'th' ? 'เกิน' : 'Over')}
+                </span>
+                <span>{splitRemaining >= 0 ? `฿${splitRemaining.toLocaleString()}` : `-฿${Math.abs(splitRemaining).toLocaleString()}`}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleConfirmSplit}
+              disabled={!splitValid}
+              className="confirm-btn"
+              style={{ width: '100%', background: splitValid ? '#a855f7' : 'rgba(255,255,255,0.1)', cursor: splitValid ? 'pointer' : 'not-allowed', opacity: splitValid ? 1 : 0.5 }}
+            >
+              <CheckCircle size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
+              {lang === 'th' ? 'ยืนยันการแยกจ่าย' : 'Confirm Split Payment'}
+            </button>
+            {!splitValid && splitSum > 0 && splitRemaining === 0 && (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', textAlign: 'center', marginTop: '0.6rem' }}>
+                {lang === 'th' ? 'ต้องระบุอย่างน้อย 2 ประเภท' : 'Select at least 2 methods'}
+              </p>
+            )}
           </>
         )}
 

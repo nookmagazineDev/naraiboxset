@@ -26,7 +26,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
   getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'phone', 'productName', 'qty', 'note', 'staff']);
   getOrCreateSheet(ss, 'Shifts', ['id', 'openTime', 'closeTime', 'openStaff', 'closeStaff', 'openCash', 'closeCash', 'totalSales', 'totalCash', 'totalCard', 'totalTransfer', 'totalOrders', 'status', 'note']);
-  getOrCreateSheet(ss, 'PaymentSummary', ['timestamp', 'orderNumber', 'tableNo', 'paymentMethod', 'grandTotal', 'staff', 'shiftId']);
+  getOrCreateSheet(ss, 'PaymentSummary', ['timestamp', 'orderNumber', 'tableNo', 'paymentMethod', 'grandTotal', 'staff', 'shiftId', 'splitDetail']);
 }
 
 // ──────────────────────────────────────────────
@@ -501,8 +501,10 @@ function doPost(e) {
   }
 
   if (action === 'savePaymentRecord') {
-    var sh = getOrCreateSheet(ss, 'PaymentSummary', ['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId']);
-    sh.appendRow([new Date().toISOString(), postData.orderNumber||'', postData.tableNo||'', postData.paymentMethod||'', Number(postData.grandTotal)||0, postData.staff||'', postData.shiftId||'']);
+    var sh = getOrCreateSheet(ss, 'PaymentSummary', ['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail']);
+    // migration: make sure the splitDetail header exists on older sheets
+    sh.getRange(1, 1, 1, 8).setValues([['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail']]);
+    sh.appendRow([new Date().toISOString(), postData.orderNumber||'', postData.tableNo||'', postData.paymentMethod||'', Number(postData.grandTotal)||0, postData.staff||'', postData.shiftId||'', postData.splitDetail||'']);
     return _bomJson({ success: true });
   }
 
