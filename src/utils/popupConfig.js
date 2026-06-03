@@ -53,6 +53,18 @@ export const extractPopupConfig = (item) => {
 // True when an item has been explicitly given its own popup configuration.
 export const hasItemPopupConfig = (food) => !!(food && food.popupConfigured);
 
+// Build the list of selectable price options for a menu item.
+// Falls back to the single legacy `price` field when no named prices exist.
+export const getPriceOptions = (food) => {
+  if (food && Array.isArray(food.prices) && food.prices.length > 0) {
+    const opts = food.prices
+      .filter(p => p && p.price !== '' && p.price != null)
+      .map(p => ({ name: p.name || '', price: Number(p.price) || 0 }));
+    if (opts.length > 0) return opts;
+  }
+  return [{ name: '', price: Number(food && food.price) || 0 }];
+};
+
 // Decide which object holds the active popup config for a given food.
 // Falls back to the food's category config when the item is not configured,
 // so existing category-based setups keep working until items are reconfigured.

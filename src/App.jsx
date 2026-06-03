@@ -22,7 +22,7 @@ import LoginScreen from './components/LoginScreen';
 import LiquorStorage from './components/LiquorStorage';
 import ShiftModal from './components/ShiftModal';
 import Reports from './components/admin/Reports';
-import { resolvePopupSource, flattenPopupConfig } from './utils/popupConfig';
+import { resolvePopupSource, flattenPopupConfig, getPriceOptions } from './utils/popupConfig';
 import './index.css';
 
 const MENU_ITEMS = [];
@@ -281,23 +281,29 @@ function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   const handleOrderClick = (food) => {
+    const multiPrice = getPriceOptions(food).length > 1;
     if (food.category === 'drink') {
-      setCart([...cart, {
-        cartId: Date.now() + Math.random(),
-        food,
-        quantity: 1,
-        allPopups: [],
-        spice: { name: '', nameEn: '' },
-        promo: { id: 'none', name: '', nameEn: '', price: 0 },
-        dining: { name: 'เครื่องดื่ม', nameEn: 'Drinks' }
-      }]);
-      setIsCartOpen(true);
+      // เครื่องดื่ม: ถ้ามีหลายราคา ให้เลือกราคาก่อน ไม่งั้นเพิ่มลงตะกร้าทันที
+      if (multiPrice) {
+        setSelectedFood(food);
+      } else {
+        setCart([...cart, {
+          cartId: Date.now() + Math.random(),
+          food,
+          quantity: 1,
+          allPopups: [],
+          spice: { name: '', nameEn: '' },
+          promo: { id: 'none', name: '', nameEn: '', price: 0 },
+          dining: { name: 'เครื่องดื่ม', nameEn: 'Drinks' }
+        }]);
+        setIsCartOpen(true);
+      }
     } else {
-      // ถ้ารายการนี้ไม่ได้เซต popup ไว้เลย → เพิ่มลงตะกร้าทันทีโดยไม่ต้องเด้ง wizard
+      // ถ้ารายการนี้ไม่ได้เซต popup และมีราคาเดียว → เพิ่มลงตะกร้าทันทีโดยไม่ต้องเด้ง wizard
       const cats = allCategories.length > 0 ? allCategories : categories;
       const cfg = resolvePopupSource(food, cats);
       const hasPopups = [1, 2, 3, 4, 5, 6].some(i => cfg[`hasPopup${i}`] === true);
-      if (!hasPopups) {
+      if (!hasPopups && !multiPrice) {
         handleConfirmOrder(food, {
           allPopups: [],
           dining: { id: 'dine_in', name: 'ทานที่ร้าน', nameEn: 'Dine-in' }
@@ -308,7 +314,12 @@ function App() {
     }
   };
 
-  const handleConfirmOrder = (baseFood, orderDetails) => {
+  const handleConfirmOrder = (rawFood, orderDetails) => {
+    // ใช้ราคาที่ลูกค้าเลือก (ถ้ามีหลายราคา) แทนราคาเริ่มต้น
+    const chosen = orderDetails.selectedPrice;
+    const baseFood = chosen
+      ? { ...rawFood, price: Number(chosen.price) || 0, priceName: chosen.name || '' }
+      : rawFood;
     const bundledPopups = [];
     if (baseFood.bundledItems && baseFood.bundledItems.length > 0) {
       baseFood.bundledItems.forEach(bundledId => {
@@ -320,7 +331,7 @@ function App() {
     }
     const allPopupsWithBundled = [...(orderDetails.allPopups || []), ...bundledPopups];
     const popupsIds = allPopupsWithBundled.map(p => p.id).sort().join('-') || 'no_popups';
-    const cartItemId = `${baseFood.id}_${popupsIds}_${orderDetails.spice?.id}_${orderDetails.promo?.id}_${orderDetails.dining?.id}`;
+    const cartItemId = `${baseFood.id}_${baseFood.priceName || ''}_${popupsIds}_${orderDetails.spice?.id}_${orderDetails.promo?.id}_${orderDetails.dining?.id}`;
     const existingItemIndex = cart.findIndex(item => item.cartItemId === cartItemId);
     let newCart;
     if (existingItemIndex >= 0) {
@@ -392,6 +403,7 @@ function App() {
     // Optimistic update: add to local tableOrders immediately
     const newLocalItems = cart.map(item => {
       const parts = [];
+      if (item.food.priceName) parts.push(item.food.priceName);
       if (item.spice && item.spice.name) parts.push('ความเผ็ด: ' + item.spice.name);
       if (item.allPopups && item.allPopups.length > 0) item.allPopups.forEach(p => parts.push(p.name));
       if (item.promo && item.promo.id !== 'none' && item.promo.name) parts.push(item.promo.name);

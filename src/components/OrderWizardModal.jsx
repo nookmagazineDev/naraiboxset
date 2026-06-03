@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowRight, ArrowLeft, Check } from 'lucide-react';
-import { resolvePopupSource } from '../utils/popupConfig';
+import { resolvePopupSource, getPriceOptions } from '../utils/popupConfig';
 
 const DINING_OPTIONS = [
   { id: 'dine_in', name: 'ทานที่ร้าน', nameEn: 'Dine-in' },
@@ -16,6 +16,11 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
   const [selectedPopup5, setSelectedPopup5] = useState({});
   const [selectedPopup6, setSelectedPopup6] = useState({});
   const [selectedDining, setSelectedDining] = useState(DINING_OPTIONS[0]);
+
+  // ราคา (หลายประเภท)
+  const priceOptions = getPriceOptions(food);
+  const isDrink = !!food && food.category === 'drink';
+  const [selectedPrice, setSelectedPrice] = useState(priceOptions[0]);
 
   // ดึงค่า popup จากตัวเมนูเอง (ถ้าตั้งไว้) ไม่งั้น fallback ไปที่หมวดหมู่
   const categoryConfig = food ? resolvePopupSource(food, categories) : {};
@@ -82,13 +87,14 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
   };
 
   const validSteps = [
+    priceOptions.length > 1 ? 'price' : null,
     categoryConfig.hasPopup1 === true ? 1 : null,
     categoryConfig.hasPopup2 === true ? 2 : null,
     categoryConfig.hasPopup3 === true ? 3 : null,
     categoryConfig.hasPopup4 === true ? 4 : null,
     categoryConfig.hasPopup5 === true ? 5 : null,
     categoryConfig.hasPopup6 === true ? 6 : null,
-    categoryConfig.hasDining !== false ? 7 : null
+    (!isDrink && categoryConfig.hasDining !== false) ? 7 : null
   ].filter(s => s !== null);
 
   const step = validSteps[currentStepIndex] || 1;
@@ -134,7 +140,7 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
   ];
 
   const currentTotal = () => {
-    let total = Number(food.price) || 0;
+    let total = Number(selectedPrice?.price) || 0;
     getExpandedPopups().forEach(a => { total += Number(a.price) || 0; });
     return total;
   };
@@ -142,7 +148,8 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
   const handleSubmit = () => {
     onConfirm(food, {
       allPopups: getExpandedPopups(),
-      dining: selectedDining
+      dining: isDrink ? { id: 'drink', name: 'เครื่องดื่ม', nameEn: 'Drinks' } : selectedDining,
+      selectedPrice
     });
   };
 
@@ -252,6 +259,24 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
         </div>
 
         <div className="wizard-body">
+          {step === 'price' && (
+            <div className="wizard-step">
+              <h3 className="step-title">{lang === 'th' ? 'เลือกประเภทราคา' : 'Select Price'}</h3>
+              <p className="step-desc">{lang === 'th' ? 'เลือกประเภทราคาที่ต้องการ' : 'Choose a price option'}</p>
+              <div className="options-grid">
+                {priceOptions.map((opt, idx) => (
+                  <div
+                    key={idx}
+                    className={`option-card ${selectedPrice === opt || (selectedPrice && selectedPrice.name === opt.name && selectedPrice.price === opt.price) ? 'selected' : ''}`}
+                    onClick={() => setSelectedPrice(opt)}
+                  >
+                    <div className="option-name">{opt.name || (lang === 'th' ? 'ราคา' : 'Price')}</div>
+                    <div className="option-price" style={{ color: 'var(--accent)', fontWeight: 700 }}>฿{Number(opt.price).toLocaleString()}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {step === 1 && renderPopupStep(pop1Config, selectedPopup1, setSelectedPopup1)}
           {step === 2 && renderPopupStep(pop2Config, selectedPopup2, setSelectedPopup2)}
           {step === 3 && renderPopupStep(pop3Config, selectedPopup3, setSelectedPopup3)}

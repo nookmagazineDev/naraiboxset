@@ -74,7 +74,12 @@ const FoodCard = ({ food, onOrderClick, onDecreaseClick, cartQuantity = 0, lang 
         {desc && <p className="pos-card-desc">{desc}</p>}
 
         <div className="pos-card-footer">
-          <span className="pos-card-price">฿{Number(food.price).toLocaleString()}</span>
+          <span className="pos-card-price">
+            ฿{Number(food.price).toLocaleString()}
+            {Array.isArray(food.prices) && food.prices.length > 1 && (
+              <span style={{ fontSize: '0.7rem', fontWeight: 600, opacity: 0.7 }}> {lang === 'th' ? 'ขึ้นไป' : '+'}</span>
+            )}
+          </span>
 
           {cartQuantity > 0 ? (
             <div className="pos-stepper" onClick={(e) => e.stopPropagation()}>

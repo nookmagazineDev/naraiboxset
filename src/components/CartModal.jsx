@@ -62,8 +62,15 @@ const CartModal = ({ cart, onClose, onRemove, onUpdateQuantity, onUpdateNote, on
             cart.map((item) => (
               <div key={item.cartId} className="cart-item">
                 <div className="cart-item-info">
-                  <h4>{lang === 'th' ? item.food.name : (item.food.nameEn || item.food.name)}</h4>
-                  
+                  <h4>
+                    {lang === 'th' ? item.food.name : (item.food.nameEn || item.food.name)}
+                    {item.food.priceName && (
+                      <span style={{ marginLeft: '0.4rem', fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent)', background: 'rgba(185,28,28,0.15)', padding: '0.1rem 0.45rem', borderRadius: '6px', verticalAlign: 'middle' }}>
+                        {item.food.priceName}
+                      </span>
+                    )}
+                  </h4>
+
                   <div className="cart-item-details">
                     {item.allPopups && item.allPopups.length > 0 && (
                       <div className="cart-item-addons">

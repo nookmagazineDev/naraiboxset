@@ -150,7 +150,11 @@ const ManageMenu = () => {
 
   const handleEdit = (item) => {
     // ensure popup fields exist (fall back to defaults for items never configured)
-    setEditingItem({ ...emptyPopupFields(), ...flattenPopupConfig(item) });
+    const flat = flattenPopupConfig(item);
+    const prices = Array.isArray(flat.prices) && flat.prices.length > 0
+      ? flat.prices
+      : [{ name: '', price: flat.price ?? '' }];
+    setEditingItem({ ...emptyPopupFields(), ...flat, prices });
     setEditingBom(bomConfig[String(item.id)] || []);
     setShowBom(false);
     setShowPopups(false);
@@ -170,12 +174,35 @@ const ManageMenu = () => {
       isActive: true,
       bundledItems: [],
       printerId: '',
+      prices: [{ name: '', price: '' }],
       ...emptyPopupFields()
     });
     setEditingBom([]);
     setShowBom(false);
     setShowPopups(false);
     setIsModalOpen(true);
+  };
+
+  // ── Multi-price helpers (สูงสุด 5 ราคา) ──
+  const updatePriceRow = (idx, field, value) => {
+    setEditingItem(prev => {
+      const rows = [...(prev.prices || [])];
+      rows[idx] = { ...rows[idx], [field]: value };
+      return { ...prev, prices: rows };
+    });
+  };
+  const addPriceRow = () => {
+    setEditingItem(prev => {
+      const rows = [...(prev.prices || [])];
+      if (rows.length >= 5) return prev;
+      return { ...prev, prices: [...rows, { name: '', price: '' }] };
+    });
+  };
+  const removePriceRow = (idx) => {
+    setEditingItem(prev => {
+      const rows = (prev.prices || []).filter((_, i) => i !== idx);
+      return { ...prev, prices: rows.length ? rows : [{ name: '', price: '' }] };
+    });
   };
 
   // toggle a menu item id within a popup{n}Items array field
@@ -189,8 +216,13 @@ const ManageMenu = () => {
 
   const handleFormSubmit = async (e) => {
     e.preventDefault();
+    // normalize prices: keep rows with a numeric price; legacy `price` = first row
+    const cleanPrices = (editingItem.prices || [])
+      .filter(p => p && p.price !== '' && p.price != null && !isNaN(Number(p.price)))
+      .map(p => ({ name: (p.name || '').trim(), price: Number(p.price) }));
+    const basePrice = cleanPrices.length > 0 ? cleanPrices[0].price : (Number(editingItem.price) || 0);
     // bundle the flat popup fields into a single popupConfig object for storage
-    const itemToSave = { ...editingItem, popupConfig: extractPopupConfig(editingItem) };
+    const itemToSave = { ...editingItem, prices: cleanPrices, price: basePrice, popupConfig: extractPopupConfig(editingItem) };
     let updated;
     if (menuItems.find(i => i.id === itemToSave.id)) {
       updated = menuItems.map(i => i.id === itemToSave.id ? itemToSave : i);
@@ -422,24 +454,63 @@ const ManageMenu = () => {
                 <textarea rows="2" value={editingItem.descriptionEn} onChange={e => setEditingItem({...editingItem, descriptionEn: e.target.value})} />
               </div>
 
-              <div style={{ display: 'flex', gap: '1rem' }}>
-                <div className="admin-form-group" style={{ flex: 1 }}>
-                  <label>{lang === 'th' ? 'ราคา (฿)' : 'Price (฿)'}</label>
-                  <input type="number" value={editingItem.price} onChange={e => setEditingItem({...editingItem, price: e.target.value})} />
+              {/* ── ราคา (ตั้งชื่อประเภทได้ สูงสุด 5) ── */}
+              <div className="admin-form-group">
+                <label>{lang === 'th' ? 'ราคา (ตั้งชื่อประเภทได้ สูงสุด 5 ราคา)' : 'Prices (named, up to 5)'}</label>
+                <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                  {lang === 'th' ? 'ถ้ามีมากกว่า 1 ราคา ลูกค้าจะเลือกประเภทราคาตอนสั่ง (เช่น เล็ก/ใหญ่, ปกติ/พิเศษ)' : 'If more than one, customers choose the price type when ordering.'}
                 </div>
-                <div className="admin-form-group" style={{ flex: 1 }}>
-                  <label>{lang === 'th' ? 'หมวดหมู่' : 'Category'}</label>
-                  <select value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
-                    {categories.length > 0 ? (
-                      categories.map(c => <option key={c.slug} value={c.slug}>{lang === 'th' ? c.name : c.nameEn}</option>)
-                    ) : (
-                      <>
-                        <option value="food">{lang === 'th' ? 'อาหาร' : 'Food'}</option>
-                        <option value="drink">{lang === 'th' ? 'เครื่องดื่ม' : 'Drink'}</option>
-                      </>
-                    )}
-                  </select>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {(editingItem.prices || []).map((row, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <input
+                        type="text"
+                        value={row.name || ''}
+                        onChange={e => updatePriceRow(idx, 'name', e.target.value)}
+                        placeholder={lang === 'th' ? (idx === 0 ? 'ชื่อราคา (เช่น ปกติ)' : 'ชื่อราคา (เช่น พิเศษ)') : 'Price name'}
+                        style={{ flex: 2, padding: '0.55rem 0.7rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '8px', margin: 0 }}
+                      />
+                      <div style={{ position: 'relative', flex: 1 }}>
+                        <span style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>฿</span>
+                        <input
+                          type="number" min="0"
+                          value={row.price ?? ''}
+                          onChange={e => updatePriceRow(idx, 'price', e.target.value)}
+                          placeholder="0"
+                          style={{ width: '100%', padding: '0.55rem 0.7rem 0.55rem 1.4rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.1)', color: 'white', borderRadius: '8px', margin: 0, boxSizing: 'border-box' }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removePriceRow(idx)}
+                        disabled={(editingItem.prices || []).length <= 1}
+                        title={lang === 'th' ? 'ลบราคานี้' : 'Remove'}
+                        style={{ background: 'none', border: 'none', color: (editingItem.prices || []).length <= 1 ? 'rgba(255,255,255,0.2)' : '#ef4444', cursor: (editingItem.prices || []).length <= 1 ? 'not-allowed' : 'pointer', padding: '0.3rem', display: 'flex' }}
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
+                {(editingItem.prices || []).length < 5 && (
+                  <button type="button" className="admin-btn secondary" onClick={addPriceRow} style={{ fontSize: '0.82rem', padding: '0.4rem 0.9rem', marginTop: '0.5rem' }}>
+                    <Plus size={14} /> {lang === 'th' ? 'เพิ่มราคา' : 'Add price'}
+                  </button>
+                )}
+              </div>
+
+              <div className="admin-form-group">
+                <label>{lang === 'th' ? 'หมวดหมู่' : 'Category'}</label>
+                <select value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
+                  {categories.length > 0 ? (
+                    categories.map(c => <option key={c.slug} value={c.slug}>{lang === 'th' ? c.name : c.nameEn}</option>)
+                  ) : (
+                    <>
+                      <option value="food">{lang === 'th' ? 'อาหาร' : 'Food'}</option>
+                      <option value="drink">{lang === 'th' ? 'เครื่องดื่ม' : 'Drink'}</option>
+                    </>
+                  )}
+                </select>
               </div>
 
               <div className="admin-form-group">
