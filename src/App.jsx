@@ -420,7 +420,16 @@ function App() {
       if (item.food.priceName) parts.push(item.food.priceName);
       if (item.customerName) parts.push('ลูกค้า: ' + item.customerName);
       if (item.spice && item.spice.name) parts.push('ความเผ็ด: ' + item.spice.name);
-      if (item.allPopups && item.allPopups.length > 0) item.allPopups.forEach(p => parts.push(p.name));
+      if (item.allPopups && item.allPopups.length > 0) {
+        // รวมตัวเลือกที่ซ้ำกันเป็นจำนวน เช่น "Leoขวด ×12"
+        const grouped = [];
+        item.allPopups.forEach(p => {
+          const found = grouped.find(g => g.name === p.name);
+          if (found) found.count += 1;
+          else grouped.push({ name: p.name, count: 1 });
+        });
+        grouped.forEach(g => parts.push(g.count > 1 ? `${g.name} ×${g.count}` : g.name));
+      }
       if (item.promo && item.promo.id !== 'none' && item.promo.name) parts.push(item.promo.name);
       if (item.note && item.note.trim()) parts.push('📝 ' + item.note.trim());
       return {

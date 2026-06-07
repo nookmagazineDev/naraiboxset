@@ -79,7 +79,17 @@ const CartModal = ({ cart, onClose, onRemove, onUpdateQuantity, onUpdateNote, on
                     )}
                     {item.allPopups && item.allPopups.length > 0 && (
                       <div className="cart-item-addons">
-                        <strong>{lang === 'th' ? 'ตัวเลือก:' : 'Options:'}</strong> {item.allPopups.map(a => lang === 'th' ? a.name : (a.nameEn || a.name)).join(', ')}
+                        <strong>{lang === 'th' ? 'ตัวเลือก:' : 'Options:'}</strong> {(() => {
+                          // รวมตัวเลือกที่ซ้ำกันแล้วแสดงเป็นจำนวน เช่น "Leoขวด ×12"
+                          const grouped = [];
+                          item.allPopups.forEach(a => {
+                            const label = lang === 'th' ? a.name : (a.nameEn || a.name);
+                            const found = grouped.find(g => g.label === label);
+                            if (found) found.count += 1;
+                            else grouped.push({ label, count: 1 });
+                          });
+                          return grouped.map(g => g.count > 1 ? `${g.label} ×${g.count}` : g.label).join(', ');
+                        })()}
                       </div>
                     )}
 
