@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { ShoppingCart, ClipboardList, Store, Globe, ShoppingBag } from 'lucide-react';
+import { ShoppingCart, ClipboardList, Store, Globe, ShoppingBag, RefreshCw } from 'lucide-react';
 import FoodCard from './components/FoodCard';
 import OrderWizardModal from './components/OrderWizardModal';
 import CartModal from './components/CartModal';
@@ -790,6 +790,15 @@ function App() {
               tableOrders={tableOrders}
               shiftOpen={!!currentShift}
             />
+            {/* Refresh button — โหลดข้อมูลโต๊ะล่าสุด */}
+            <button
+              onClick={refreshTableOrders}
+              disabled={isRefreshing}
+              style={{ position: 'fixed', top: '1.5rem', right: '1.5rem', zIndex: 100, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '50px', color: 'white', cursor: isRefreshing ? 'wait' : 'pointer', padding: '0.7rem 1.2rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.4)', opacity: isRefreshing ? 0.7 : 1 }}
+            >
+              <RefreshCw size={16} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
+              {isRefreshing ? (lang === 'th' ? 'กำลังโหลด...' : 'Loading...') : (lang === 'th' ? 'รีเฟรช' : 'Refresh')}
+            </button>
             {/* Shift button — admin & cashier only */}
             {(isAdmin || isCashier) && (
               <button
