@@ -305,6 +305,20 @@ function doPost(e) {
     }
   }
 
+  // อัปโหลดสลิปการโอน ลงโฟลเดอร์เฉพาะ ตั้งชื่อตามเลขที่บิล
+  if (action === 'uploadSlip') {
+    try {
+      var slipFolderId = '1gxmLA9FZttcH3PCxlqY7TEHNXtnMMgYj';
+      var slipFolder   = DriveApp.getFolderById(slipFolderId);
+      var slipBlob     = Utilities.newBlob(Utilities.base64Decode(postData.base64), postData.mimeType || 'image/jpeg', postData.filename || ('slip-' + Date.now() + '.jpg'));
+      var slipFile     = slipFolder.createFile(slipBlob);
+      slipFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      return _bomJson({ success: true, url: 'https://drive.google.com/uc?export=view&id=' + slipFile.getId() });
+    } catch(e) {
+      return _bomJson({ success: false, error: e.toString() });
+    }
+  }
+
   if (action === 'upsertMenu') {
     var sheet = ss.getSheetByName('Menu');
     var item = postData.item;
