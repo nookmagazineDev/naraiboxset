@@ -273,8 +273,15 @@ function App() {
     };
   }, []);
 
+  // เมนู 1 รายการอยู่ได้หลายหมวด: เช็คทั้งหมวดหลัก (category) และหมวดเพิ่มเติม (categories[])
+  const itemInCategory = (item, slug) => {
+    const primary = item.category || 'food';
+    const extra = Array.isArray(item.categories) ? item.categories : [];
+    return primary === slug || extra.includes(slug);
+  };
+
   React.useEffect(() => {
-    const visibleCats = categories.filter(cat => liveMenu.some(i => (i.category || 'food') === cat.slug));
+    const visibleCats = categories.filter(cat => liveMenu.some(i => itemInCategory(i, cat.slug)));
     if (visibleCats.length > 0 && !visibleCats.find(c => c.slug === activeCategory)) {
       setActiveCategory(visibleCats[0].slug);
     }
@@ -879,9 +886,9 @@ function App() {
                 <aside className="pos-sidebar">
                   <div className="pos-sidebar-header">{lang === 'th' ? 'หมวดหมู่' : 'Categories'}</div>
                   {categories
-                    .filter(cat => liveMenu.some(i => (i.category || 'food') === cat.slug))
+                    .filter(cat => liveMenu.some(i => itemInCategory(i, cat.slug)))
                     .map(cat => {
-                      const count = liveMenu.filter(i => (i.category || 'food') === cat.slug).length;
+                      const count = liveMenu.filter(i => itemInCategory(i, cat.slug)).length;
                       return (
                         <button
                           key={cat.slug}
@@ -902,7 +909,7 @@ function App() {
                 <main className="pos-main">
                   {(() => {
                     const activeCat = categories.find(c => c.slug === activeCategory);
-                    const filteredItems = liveMenu.filter(i => (i.category || 'food') === activeCategory);
+                    const filteredItems = liveMenu.filter(i => itemInCategory(i, activeCategory));
                     return (
                       <>
                         <div className="pos-section-header">

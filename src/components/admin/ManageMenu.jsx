@@ -165,6 +165,7 @@ const ManageMenu = () => {
     setEditingItem({
       id: Date.now(),
       category: 'food',
+      categories: [],
       name: '',
       nameEn: '',
       description: '',
@@ -205,6 +206,15 @@ const ManageMenu = () => {
     });
   };
 
+  // toggle an extra category slug for the current item (อยู่ได้หลายหมวด)
+  const handleExtraCategoryToggle = (slug) => {
+    setEditingItem(prev => {
+      const current = Array.isArray(prev.categories) ? prev.categories : [];
+      if (current.includes(slug)) return { ...prev, categories: current.filter(s => s !== slug) };
+      return { ...prev, categories: [...current, slug] };
+    });
+  };
+
   // toggle a menu item id within a popup{n}Items array field
   const handlePopupItemToggle = (field, id) => {
     setEditingItem(prev => {
@@ -221,8 +231,12 @@ const ManageMenu = () => {
       .filter(p => p && p.price !== '' && p.price != null && !isNaN(Number(p.price)))
       .map(p => ({ name: (p.name || '').trim(), price: Number(p.price) }));
     const basePrice = cleanPrices.length > 0 ? cleanPrices[0].price : (Number(editingItem.price) || 0);
+    // หมวดเพิ่มเติม: ไม่ซ้ำและไม่รวมหมวดหลัก (อยู่ได้หลายหมวด)
+    const extraCategories = Array.isArray(editingItem.categories)
+      ? [...new Set(editingItem.categories.filter(s => s && s !== editingItem.category))]
+      : [];
     // bundle the flat popup fields into a single popupConfig object for storage
-    const itemToSave = { ...editingItem, prices: cleanPrices, price: basePrice, popupConfig: extractPopupConfig(editingItem) };
+    const itemToSave = { ...editingItem, categories: extraCategories, prices: cleanPrices, price: basePrice, popupConfig: extractPopupConfig(editingItem) };
     let updated;
     if (menuItems.find(i => i.id === itemToSave.id)) {
       updated = menuItems.map(i => i.id === itemToSave.id ? itemToSave : i);
@@ -366,9 +380,16 @@ const ManageMenu = () => {
                       <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)'}}>{item.nameEn}</span>
                     </td>
                     <td>
-                       <span style={{ background: 'rgba(255,255,255,0.1)', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem' }}>
-                         {item.category || 'food'}
-                       </span>
+                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                         <span style={{ background: 'rgba(249,115,22,0.18)', border: '1px solid rgba(249,115,22,0.35)', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem' }}>
+                           {item.category || 'food'}
+                         </span>
+                         {Array.isArray(item.categories) && item.categories.map(slug => (
+                           <span key={slug} style={{ background: 'rgba(255,255,255,0.1)', padding: '0.3rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem' }}>
+                             +{slug}
+                           </span>
+                         ))}
+                       </div>
                     </td>
                     <td style={{ color: 'var(--accent)', fontWeight: 'bold' }}>฿{item.price}</td>
                     <td>
@@ -500,7 +521,7 @@ const ManageMenu = () => {
               </div>
 
               <div className="admin-form-group">
-                <label>{lang === 'th' ? 'หมวดหมู่' : 'Category'}</label>
+                <label>{lang === 'th' ? 'หมวดหมู่หลัก' : 'Primary Category'}</label>
                 <select value={editingItem.category} onChange={e => setEditingItem({...editingItem, category: e.target.value})}>
                   {categories.length > 0 ? (
                     categories.map(c => <option key={c.slug} value={c.slug}>{lang === 'th' ? c.name : c.nameEn}</option>)
@@ -512,6 +533,36 @@ const ManageMenu = () => {
                   )}
                 </select>
               </div>
+
+              {categories.length > 0 && (
+                <div className="admin-form-group">
+                  <label>{lang === 'th' ? 'อยู่ในหมวดเพิ่มเติม (เลือกได้หลายหมวด)' : 'Also show in (multiple categories)'}</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.35rem' }}>
+                    {categories.filter(c => c.slug !== editingItem.category).map(c => {
+                      const checked = Array.isArray(editingItem.categories) && editingItem.categories.includes(c.slug);
+                      return (
+                        <label
+                          key={c.slug}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '0.4rem',
+                            padding: '0.4rem 0.7rem', borderRadius: '8px', cursor: 'pointer',
+                            background: checked ? 'rgba(249,115,22,0.15)' : 'rgba(255,255,255,0.05)',
+                            border: `1px solid ${checked ? 'rgba(249,115,22,0.5)' : 'rgba(255,255,255,0.12)'}`,
+                            fontSize: '0.85rem', color: 'white'
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => handleExtraCategoryToggle(c.slug)}
+                          />
+                          {lang === 'th' ? c.name : c.nameEn}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="admin-form-group">
                 <label>{lang === 'th' ? 'รูปภาพ (อัปโหลดจากคอมฯ หรือวาง URL)' : 'Image (Upload from PC or enter Cloud URL)'}</label>
