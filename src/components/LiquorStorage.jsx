@@ -6,7 +6,10 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa
 const EMPTY_FORM = { customerName: '', phone: '', productName: '', category: 'เหล้า', qty: '', unit: '%', note: '' };
 const LIQUOR_UNITS = ['%', 'ml', 'ขวด', 'ส่วน'];
 
-const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
+// หมวดที่ดึงรายชื่อสินค้ามาแสดงในช่องชื่อสินค้า
+const PRODUCT_CATEGORY_NAMES = ['เหล้า', 'เบียร์', 'โชจู', 'มิกเซอร์'];
+
+const LiquorStorage = ({ currentUser, lang = 'th', onBack, menu = [], categories = [] }) => {
   const [records, setRecords]           = useState([]);
   const [loading, setLoading]           = useState(true);
   const [modal, setModal]               = useState(null); // null | 'deposit'
@@ -72,6 +75,19 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
     .sort((a, b) => a.customerName.localeCompare(b.customerName, 'th'));
 
   const history = [...records].reverse();
+
+  // รายชื่อสินค้าจากหมวด เหล้า/เบียร์/โชจู/มิกเซอร์ → ใช้เป็น dropdown ในช่องชื่อสินค้า
+  const productSlugs = categories
+    .filter(c => PRODUCT_CATEGORY_NAMES.includes((c.name || '').trim()))
+    .map(c => c.slug);
+  const itemInCat = (m) => {
+    const primary = m.category || '';
+    const extra = Array.isArray(m.categories) ? m.categories : [];
+    return productSlugs.includes(primary) || extra.some(s => productSlugs.includes(s));
+  };
+  const productOptions = [...new Set(
+    menu.filter(itemInCat).map(m => (m.name || '').trim()).filter(Boolean)
+  )].sort((a, b) => a.localeCompare(b, 'th'));
 
   const openModal = (type) => {
     setForm(EMPTY_FORM);
@@ -396,7 +412,21 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
 
               <div>
                 <label style={labelStyle}>ชื่อสินค้า / ยี่ห้อ *</label>
-                <input style={inputStyle} placeholder="เช่น Johnnie Walker Black" value={form.productName} onChange={e => setForm(f => ({ ...f, productName: e.target.value }))} />
+                <input
+                  style={inputStyle}
+                  list="liquor-product-options"
+                  placeholder={productOptions.length ? 'เลือกจากรายการ หรือพิมพ์เอง' : 'เช่น Johnnie Walker Black'}
+                  value={form.productName}
+                  onChange={e => setForm(f => ({ ...f, productName: e.target.value }))}
+                />
+                <datalist id="liquor-product-options">
+                  {productOptions.map(name => <option key={name} value={name} />)}
+                </datalist>
+                {productOptions.length > 0 && (
+                  <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.74rem', margin: '0.35rem 0 0' }}>
+                    มี {productOptions.length} รายการจากหมวดเหล้า/เบียร์/โชจู/มิกเซอร์ ให้เลือก
+                  </p>
+                )}
               </div>
 
               {/* เลือกประเภท: เหล้า / เบียร์ */}

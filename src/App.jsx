@@ -985,7 +985,13 @@ function App() {
         } />
 
         <Route path="/liquor" element={
-          <LiquorStorage currentUser={currentUser} lang={lang} onBack={() => navigate('/table-select')} />
+          <LiquorStorage
+            currentUser={currentUser}
+            lang={lang}
+            onBack={() => navigate('/table-select')}
+            menu={allMenu.length > 0 ? allMenu : liveMenu}
+            categories={allCategories.length > 0 ? allCategories : categories}
+          />
         } />
 
         <Route path="/admin" element={(isAdmin || isCashier) ? <AdminLayout lang={lang} setLang={setLang} onLogout={handleLogout} isCashier={isCashier} /> : <Navigate to="/table-select" replace />}>
