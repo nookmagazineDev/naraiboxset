@@ -24,11 +24,32 @@ const calcCharges = (subtotal, settings = {}, discount = null) => {
 const CheckoutModal = ({
   tableOrderItems = [], total = 0, orderNumber,
   onClose, onComplete, lang = 'th',
-  settings = {}, discounts = []
+  settings = {}, discounts = [], users = [], currentUser = null
 }) => {
   const [paymentStep, setPaymentStep] = useState('summary');
   const [cashInput, setCashInput] = useState('');
   const [selectedDiscount, setSelectedDiscount] = useState(null);
+
+  // อนุมัติสร้าง QR โดยแอดมิน/แคชเชียร์
+  const [qrApproved, setQrApproved] = useState(false);
+  const [approverName, setApproverName] = useState('');
+  const [approvePin, setApprovePin] = useState('');
+  const [approveErr, setApproveErr] = useState('');
+
+  const isTrue = (v) => v === true || v === 'TRUE';
+  const canApprove = (u) => isTrue(u?.isAdmin) || isTrue(u?.isCashier) || String(u?.username || '').toLowerCase() === 'admin';
+
+  const submitApproval = () => {
+    const match = (users || []).find(u => String(u.pin) === String(approvePin).trim() && canApprove(u));
+    if (match) {
+      setQrApproved(true);
+      setApproverName(match.username || '');
+      setApprovePin('');
+      setApproveErr('');
+    } else {
+      setApproveErr(lang === 'th' ? 'PIN ไม่ถูกต้อง หรือไม่มีสิทธิ์อนุมัติ' : 'Invalid PIN or no approval permission');
+    }
+  };
 
   // แยกจ่าย (split payment)
   const [splitCash, setSplitCash] = useState('');
@@ -45,15 +66,22 @@ const CheckoutModal = ({
   // ── PromptPay QR ── (เลขพร้อมเพย์ ตั้งได้ที่ตั้งค่าร้าน ไม่งั้นใช้ค่าเริ่มต้น)
   const promptPayId = settings?.promptPayId || '3101600936940';
   const [qrDataUrl, setQrDataUrl] = useState('');
+  // รีเซ็ตการอนุมัติเมื่อออกจากขั้นเงินโอน (ต้องอนุมัติใหม่ทุกครั้ง)
   useEffect(() => {
-    if (paymentStep !== 'transfer' || grand <= 0) { setQrDataUrl(''); return; }
+    if (paymentStep !== 'transfer') {
+      setQrApproved(false); setApproverName(''); setApprovePin(''); setApproveErr('');
+    }
+  }, [paymentStep]);
+  useEffect(() => {
+    // สร้าง QR เฉพาะเมื่อได้รับอนุมัติจากแอดมิน/แคชเชียร์แล้วเท่านั้น
+    if (paymentStep !== 'transfer' || grand <= 0 || !qrApproved) { setQrDataUrl(''); return; }
     let cancelled = false;
     const payload = generatePromptPayPayload(promptPayId, grand);
     QRCode.toDataURL(payload, { width: 320, margin: 1, errorCorrectionLevel: 'M' })
       .then(url => { if (!cancelled) setQrDataUrl(url); })
       .catch(() => { if (!cancelled) setQrDataUrl(''); });
     return () => { cancelled = true; };
-  }, [paymentStep, grand, promptPayId]);
+  }, [paymentStep, grand, promptPayId, qrApproved]);
 
   // split helpers
   const splitCashN = parseFloat(splitCash) || 0;
@@ -542,10 +570,57 @@ const CheckoutModal = ({
               </h2>
               <button className="close-btn" onClick={() => setPaymentStep('payment_method')}><ArrowLeft size={22} /></button>
             </div>
+            {!qrApproved ? (
+              /* ── ต้องให้แอดมิน/แคชเชียร์อนุมัติก่อนสร้าง QR ── */
+              <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+                <div style={{ fontSize: '2.75rem', marginBottom: '0.5rem' }}>🔒</div>
+                <h3 style={{ fontSize: '1.1rem', marginBottom: '0.35rem', color: 'white' }}>
+                  {lang === 'th' ? 'ต้องได้รับการอนุมัติ' : 'Approval Required'}
+                </h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 auto 1.1rem', maxWidth: '320px' }}>
+                  {lang === 'th'
+                    ? 'การชำระด้วย QR ต้องให้ผู้มีสิทธิ์ (แอดมิน/แคชเชียร์) ใส่ PIN ยืนยันก่อน จึงจะสร้าง QR ได้'
+                    : 'QR payment must be approved by an admin/cashier PIN before the QR is generated'}
+                </p>
+
+                <div style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', padding: '1rem', maxWidth: '320px', margin: '0 auto 1rem' }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '0.25rem' }}>{lang === 'th' ? 'ยอดที่ต้องชำระ' : 'Amount Due'}</div>
+                  <div style={{ color: '#fbbf24', fontWeight: 900, fontSize: '1.8rem' }}>฿{grand.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                </div>
+
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={approvePin}
+                  onChange={e => { setApprovePin(e.target.value.replace(/\D/g, '')); setApproveErr(''); }}
+                  onKeyDown={e => { if (e.key === 'Enter') submitApproval(); }}
+                  placeholder={lang === 'th' ? 'PIN ผู้มีสิทธิ์ (4 หลัก)' : 'Approver PIN (4 digits)'}
+                  autoFocus
+                  style={{ width: '100%', maxWidth: '320px', padding: '0.85rem', background: 'rgba(0,0,0,0.3)', border: '2px solid rgba(96,165,250,0.4)', borderRadius: '12px', color: 'white', fontSize: '1.5rem', fontWeight: 700, textAlign: 'center', letterSpacing: '0.5rem', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box', margin: '0 auto', display: 'block' }}
+                />
+                {approveErr && (
+                  <p style={{ color: '#ef4444', fontSize: '0.85rem', marginTop: '0.6rem' }}>{approveErr}</p>
+                )}
+
+                <button
+                  onClick={submitApproval}
+                  disabled={approvePin.length !== 4}
+                  className="confirm-btn"
+                  style={{ width: '100%', marginTop: '1rem', background: approvePin.length === 4 ? '#60a5fa' : 'rgba(255,255,255,0.1)', cursor: approvePin.length === 4 ? 'pointer' : 'not-allowed', opacity: approvePin.length === 4 ? 1 : 0.5 }}
+                >
+                  <CheckCircle size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
+                  {lang === 'th' ? 'อนุมัติและสร้าง QR' : 'Approve & Generate QR'}
+                </button>
+              </div>
+            ) : (
             <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
               <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem', color: 'white' }}>
                 {lang === 'th' ? 'สแกนเพื่อชำระเงิน' : 'Scan to Pay'}
               </h3>
+              <p style={{ color: '#22c55e', fontSize: '0.8rem', margin: '0 0 0.25rem' }}>
+                ✓ {lang === 'th' ? `อนุมัติโดย ${approverName}` : `Approved by ${approverName}`}
+              </p>
               <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', margin: '0 0 0.85rem' }}>
                 {lang === 'th' ? 'พร้อมเพย์ (PromptPay) — รองรับทุกแอปธนาคาร' : 'PromptPay — works with any Thai banking app'}
               </p>
@@ -579,6 +654,7 @@ const CheckoutModal = ({
                 {lang === 'th' ? 'ยืนยันรับเงินโอนแล้ว' : 'Confirm Transfer Received'}
               </button>
             </div>
+            )}
           </>
         )}
 

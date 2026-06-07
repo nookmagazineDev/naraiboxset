@@ -1064,6 +1064,8 @@ function App() {
           onComplete={handleCheckoutComplete}
           settings={posSettings}
           discounts={posDiscounts}
+          users={users}
+          currentUser={currentUser}
         />
       )}
     </div>
