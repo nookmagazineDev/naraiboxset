@@ -215,14 +215,19 @@ const TableOrderView = ({
                         {item.Options}
                       </div>
                     )}
-                    <div style={{
-                      fontSize: '0.82rem',
-                      color: 'var(--text-muted)',
-                      marginTop: '0.15rem',
-                      opacity: 0.6
-                    }}>
-                      {new Date(item.Timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                    </div>
+                    {item.Timestamp && !isNaN(new Date(item.Timestamp)) && (
+                      <div style={{
+                        fontSize: '0.82rem',
+                        color: 'var(--text-muted)',
+                        marginTop: '0.15rem',
+                        opacity: 0.6
+                      }}>
+                        🕒 {new Date(item.Timestamp).toLocaleString(lang === 'th' ? 'th-TH' : 'en-GB', {
+                          day: '2-digit', month: '2-digit', year: 'numeric',
+                          hour: '2-digit', minute: '2-digit'
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
                     <span style={{ fontWeight: '700', color: 'white', fontSize: '0.97rem' }}>
