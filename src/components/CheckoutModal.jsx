@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import QRCode from 'qrcode';
 import { X, CheckCircle, ArrowLeft, CreditCard, Banknote, Smartphone, Tag, ChevronRight, Split } from 'lucide-react';
+import { generatePromptPayPayload } from '../utils/promptpay';
 
 const calcCharges = (subtotal, settings = {}, discount = null) => {
   let discountAmount = 0;
@@ -39,6 +41,19 @@ const CheckoutModal = ({
 
   const cashAmount = parseFloat(cashInput) || 0;
   const change = cashAmount - grand;
+
+  // ── PromptPay QR ── (เลขพร้อมเพย์ ตั้งได้ที่ตั้งค่าร้าน ไม่งั้นใช้ค่าเริ่มต้น)
+  const promptPayId = settings?.promptPayId || '3101600936940';
+  const [qrDataUrl, setQrDataUrl] = useState('');
+  useEffect(() => {
+    if (paymentStep !== 'transfer' || grand <= 0) { setQrDataUrl(''); return; }
+    let cancelled = false;
+    const payload = generatePromptPayPayload(promptPayId, grand);
+    QRCode.toDataURL(payload, { width: 320, margin: 1, errorCorrectionLevel: 'M' })
+      .then(url => { if (!cancelled) setQrDataUrl(url); })
+      .catch(() => { if (!cancelled) setQrDataUrl(''); });
+    return () => { cancelled = true; };
+  }, [paymentStep, grand, promptPayId]);
 
   // split helpers
   const splitCashN = parseFloat(splitCash) || 0;
@@ -527,17 +542,36 @@ const CheckoutModal = ({
               </h2>
               <button className="close-btn" onClick={() => setPaymentStep('payment_method')}><ArrowLeft size={22} /></button>
             </div>
-            <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-              <div style={{ fontSize: '3.5rem', marginBottom: '0.75rem' }}>📲</div>
-              <h3 style={{ fontSize: '1.15rem', marginBottom: '0.75rem', color: 'white' }}>
-                {lang === 'th' ? 'กรุณาสแกน QR Code' : 'Please Scan QR Code'}
+            <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem', color: 'white' }}>
+                {lang === 'th' ? 'สแกนเพื่อชำระเงิน' : 'Scan to Pay'}
               </h3>
-              <div style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', padding: '1rem', marginBottom: '1.25rem' }}>
-                <p style={{ color: 'white', fontWeight: '600', margin: '0 0 0.35rem' }}>🔲 {lang === 'th' ? 'QR Code ที่เคาน์เตอร์' : 'QR Code at Counter'}</p>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>{lang === 'th' ? 'สแกน QR พร้อมเพย์ที่ตั้งไว้ที่ร้าน' : 'Scan the PromptPay QR at the store'}</p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', margin: '0 0 0.85rem' }}>
+                {lang === 'th' ? 'พร้อมเพย์ (PromptPay) — รองรับทุกแอปธนาคาร' : 'PromptPay — works with any Thai banking app'}
+              </p>
+
+              {/* PromptPay QR card */}
+              <div style={{ background: 'white', borderRadius: '16px', padding: '1rem 1rem 1.25rem', maxWidth: '320px', margin: '0 auto 1rem', boxShadow: '0 8px 30px rgba(0,0,0,0.35)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <span style={{ color: '#003d6a', fontWeight: 800, fontSize: '1.05rem', letterSpacing: '0.5px' }}>THAI QR PAYMENT</span>
+                </div>
+                <div style={{ background: '#003d6a', color: 'white', fontWeight: 800, fontSize: '0.9rem', borderRadius: '8px', padding: '0.35rem', marginBottom: '0.85rem' }}>
+                  PromptPay
+                </div>
+                {qrDataUrl ? (
+                  <img src={qrDataUrl} alt="PromptPay QR" style={{ width: '100%', maxWidth: '260px', display: 'block', margin: '0 auto' }} />
+                ) : (
+                  <div style={{ height: '260px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
+                    {lang === 'th' ? 'กำลังสร้าง QR...' : 'Generating QR...'}
+                  </div>
+                )}
+                <div style={{ color: '#003d6a', marginTop: '0.65rem' }}>
+                  <div style={{ fontSize: '0.78rem', opacity: 0.8 }}>{lang === 'th' ? 'พร้อมเพย์ ID' : 'PromptPay ID'}: {promptPayId}</div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: 900, marginTop: '0.15rem' }}>฿{grand.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                </div>
               </div>
-              <PriceBreakdown compact />
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1rem' }}>
                 {lang === 'th' ? 'บิลเลขที่:' : 'Bill No:'} <strong style={{ color: 'var(--accent)' }}>{orderNumber}</strong>
               </p>
               <button onClick={() => handleConfirmPayment('เงินโอน')} className="confirm-btn" style={{ background: '#60a5fa', width: '100%' }}>
