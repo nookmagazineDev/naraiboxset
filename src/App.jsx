@@ -790,13 +790,15 @@ function App() {
               tableOrders={tableOrders}
               shiftOpen={!!currentShift}
             />
-            {/* Shift button */}
-            <button
-              onClick={() => setShiftModalMode(currentShift ? 'close' : 'open')}
-              style={{ position: 'fixed', bottom: '5.5rem', right: '1.5rem', zIndex: 100, background: currentShift ? 'rgba(239,68,68,0.85)' : 'rgba(34,197,94,0.85)', border: 'none', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: `0 4px 20px ${currentShift ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.35)'}` }}
-            >
-              {currentShift ? '🔴 ปิดกะ' : '🟢 เปิดกะ'}
-            </button>
+            {/* Shift button — admin & cashier only */}
+            {(isAdmin || isCashier) && (
+              <button
+                onClick={() => setShiftModalMode(currentShift ? 'close' : 'open')}
+                style={{ position: 'fixed', bottom: '5.5rem', right: '1.5rem', zIndex: 100, background: currentShift ? 'rgba(239,68,68,0.85)' : 'rgba(34,197,94,0.85)', border: 'none', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: `0 4px 20px ${currentShift ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.35)'}` }}
+              >
+                {currentShift ? '🔴 ปิดกะ' : '🟢 เปิดกะ'}
+              </button>
+            )}
             {/* Liquor storage button */}
             <button
               onClick={() => navigate('/liquor')}
