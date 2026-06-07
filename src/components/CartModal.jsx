@@ -72,6 +72,11 @@ const CartModal = ({ cart, onClose, onRemove, onUpdateQuantity, onUpdateNote, on
                   </h4>
 
                   <div className="cart-item-details">
+                    {item.customerName && (
+                      <div className="cart-item-customer">
+                        <strong>{lang === 'th' ? 'ลูกค้า:' : 'Customer:'}</strong> {item.customerName}
+                      </div>
+                    )}
                     {item.allPopups && item.allPopups.length > 0 && (
                       <div className="cart-item-addons">
                         <strong>{lang === 'th' ? 'ตัวเลือก:' : 'Options:'}</strong> {item.allPopups.map(a => lang === 'th' ? a.name : (a.nameEn || a.name)).join(', ')}

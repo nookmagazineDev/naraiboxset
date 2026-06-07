@@ -281,6 +281,10 @@ function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   const handleOrderClick = (food) => {
+    if (!currentShift) {
+      alert(lang === 'th' ? 'กรุณาเปิดกะก่อนจึงจะสั่งอาหารได้' : 'Please open a shift before ordering.');
+      return;
+    }
     const multiPrice = getPriceOptions(food).length > 1;
     if (food.category === 'drink') {
       // เครื่องดื่ม: ถ้ามีหลายราคา ให้เลือกราคาก่อน ไม่งั้นเพิ่มลงตะกร้าทันที
@@ -329,9 +333,10 @@ function App() {
         }
       });
     }
+    const customerName = (orderDetails.customerName || '').trim();
     const allPopupsWithBundled = [...(orderDetails.allPopups || []), ...bundledPopups];
     const popupsIds = allPopupsWithBundled.map(p => p.id).sort().join('-') || 'no_popups';
-    const cartItemId = `${baseFood.id}_${baseFood.priceName || ''}_${popupsIds}_${orderDetails.spice?.id}_${orderDetails.promo?.id}_${orderDetails.dining?.id}`;
+    const cartItemId = `${baseFood.id}_${baseFood.priceName || ''}_${customerName}_${popupsIds}_${orderDetails.spice?.id}_${orderDetails.promo?.id}_${orderDetails.dining?.id}`;
     const existingItemIndex = cart.findIndex(item => item.cartItemId === cartItemId);
     let newCart;
     if (existingItemIndex >= 0) {
@@ -343,6 +348,7 @@ function App() {
         cartItemId,
         food: baseFood,
         quantity: 1,
+        customerName,
         allPopups: allPopupsWithBundled,
         spice: orderDetails.spice,
         promo: orderDetails.promo,
@@ -404,6 +410,7 @@ function App() {
     const newLocalItems = cart.map(item => {
       const parts = [];
       if (item.food.priceName) parts.push(item.food.priceName);
+      if (item.customerName) parts.push('ลูกค้า: ' + item.customerName);
       if (item.spice && item.spice.name) parts.push('ความเผ็ด: ' + item.spice.name);
       if (item.allPopups && item.allPopups.length > 0) item.allPopups.forEach(p => parts.push(p.name));
       if (item.promo && item.promo.id !== 'none' && item.promo.name) parts.push(item.promo.name);
@@ -733,6 +740,7 @@ function App() {
               setGlobalTableNumber={setTableNumber}
               lang={lang}
               tableOrders={tableOrders}
+              shiftOpen={!!currentShift}
             />
             {/* Shift button */}
             <button

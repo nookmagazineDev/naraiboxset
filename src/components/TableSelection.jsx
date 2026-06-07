@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './TableSelection.css';
 
-const TableSelection = ({ setGlobalTableNumber, lang, tableOrders = [] }) => {
+const TableSelection = ({ setGlobalTableNumber, lang, tableOrders = [], shiftOpen = true }) => {
   const navigate = useNavigate();
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [selectedTableForCustomer, setSelectedTableForCustomer] = useState(null);
@@ -17,6 +17,10 @@ const TableSelection = ({ setGlobalTableNumber, lang, tableOrders = [] }) => {
   };
 
   const handleSelectTable = (num) => {
+    if (!shiftOpen) {
+      alert(lang === 'th' ? 'กรุณาเปิดกะก่อนจึงจะเลือกโต๊ะได้' : 'Please open a shift before selecting a table.');
+      return;
+    }
     const count = getTableItemCount(num);
     if (count > 0) {
       setGlobalTableNumber(num);
@@ -47,7 +51,17 @@ const TableSelection = ({ setGlobalTableNumber, lang, tableOrders = [] }) => {
           {lang === 'th' ? 'เลือกโต๊ะเพื่อดูรายการอาหาร' : 'Select a table to view orders'}
         </p>
 
-        <div className="table-grid">
+        {!shiftOpen && (
+          <div style={{
+            margin: '0 0 1rem 0', padding: '0.75rem 1rem', borderRadius: '10px',
+            background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)',
+            color: '#fca5a5', fontSize: '0.9rem', fontWeight: 600, textAlign: 'center'
+          }}>
+            {lang === 'th' ? '⚠️ ยังไม่ได้เปิดกะ — กรุณาเปิดกะก่อนจึงจะเลือกโต๊ะและสั่งอาหารได้' : '⚠️ Shift not open — please open a shift to select a table and order.'}
+          </div>
+        )}
+
+        <div className="table-grid" style={{ opacity: shiftOpen ? 1 : 0.45, pointerEvents: shiftOpen ? 'auto' : 'none' }}>
           {predefinedTables.map(num => {
             const count = getTableItemCount(num);
             const hasOrders = count > 0;

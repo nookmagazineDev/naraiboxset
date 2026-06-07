@@ -17,10 +17,15 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
   const [selectedPopup6, setSelectedPopup6] = useState({});
   const [selectedDining, setSelectedDining] = useState(DINING_OPTIONS[0]);
 
-  // ราคา (หลายประเภท)
+  // ราคา (หลายประเภท) → ใช้เป็น "ประเภทลูกค้า"
   const priceOptions = getPriceOptions(food);
   const isDrink = !!food && food.category === 'drink';
   const [selectedPrice, setSelectedPrice] = useState(priceOptions[0]);
+  const [customerName, setCustomerName] = useState('');
+
+  const selectedPriceIdx = Math.max(0, priceOptions.findIndex(o =>
+    o === selectedPrice || (selectedPrice && o.name === selectedPrice.name && o.price === selectedPrice.price)
+  ));
 
   // ดึงค่า popup จากตัวเมนูเอง (ถ้าตั้งไว้) ไม่งั้น fallback ไปที่หมวดหมู่
   const categoryConfig = food ? resolvePopupSource(food, categories) : {};
@@ -149,7 +154,8 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
     onConfirm(food, {
       allPopups: getExpandedPopups(),
       dining: isDrink ? { id: 'drink', name: 'เครื่องดื่ม', nameEn: 'Drinks' } : selectedDining,
-      selectedPrice
+      selectedPrice,
+      customerName: customerName.trim()
     });
   };
 
@@ -261,19 +267,48 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
         <div className="wizard-body">
           {step === 'price' && (
             <div className="wizard-step">
-              <h3 className="step-title">{lang === 'th' ? 'เลือกประเภทราคา' : 'Select Price'}</h3>
-              <p className="step-desc">{lang === 'th' ? 'เลือกประเภทราคาที่ต้องการ' : 'Choose a price option'}</p>
-              <div className="options-grid">
-                {priceOptions.map((opt, idx) => (
-                  <div
-                    key={idx}
-                    className={`option-card ${selectedPrice === opt || (selectedPrice && selectedPrice.name === opt.name && selectedPrice.price === opt.price) ? 'selected' : ''}`}
-                    onClick={() => setSelectedPrice(opt)}
+              <h3 className="step-title">{lang === 'th' ? 'เลือกประเภทลูกค้า' : 'Select Customer Type'}</h3>
+              <p className="step-desc">{lang === 'th' ? 'เลือกประเภทลูกค้าเพื่อกำหนดราคา' : 'Choose customer type to set the price'}</p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', maxWidth: '440px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600 }}>
+                    {lang === 'th' ? 'ประเภทลูกค้า' : 'Customer Type'}
+                  </span>
+                  <select
+                    value={selectedPriceIdx}
+                    onChange={(e) => setSelectedPrice(priceOptions[Number(e.target.value)])}
+                    style={{
+                      width: '100%', padding: '0.85rem 1rem', borderRadius: '10px',
+                      background: 'rgba(255,255,255,0.06)', color: 'white',
+                      border: '1px solid rgba(255,255,255,0.18)', fontSize: '1rem',
+                      fontWeight: 600, cursor: 'pointer', appearance: 'auto'
+                    }}
                   >
-                    <div className="option-name">{opt.name || (lang === 'th' ? 'ราคา' : 'Price')}</div>
-                    <div className="option-price" style={{ color: 'var(--accent)', fontWeight: 700 }}>฿{Number(opt.price).toLocaleString()}</div>
-                  </div>
-                ))}
+                    {priceOptions.map((opt, idx) => (
+                      <option key={idx} value={idx} style={{ color: '#000' }}>
+                        {(opt.name || (lang === 'th' ? 'ปกติ' : 'Normal'))} — ฿{Number(opt.price).toLocaleString()}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600 }}>
+                    {lang === 'th' ? 'ชื่อลูกค้า' : 'Customer Name'}
+                  </span>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder={lang === 'th' ? 'ใส่ชื่อลูกค้า (ถ้ามี)' : 'Enter customer name (optional)'}
+                    style={{
+                      width: '100%', padding: '0.85rem 1rem', borderRadius: '10px',
+                      background: 'rgba(255,255,255,0.06)', color: 'white',
+                      border: '1px solid rgba(255,255,255,0.18)', fontSize: '1rem'
+                    }}
+                  />
+                </label>
               </div>
             </div>
           )}
