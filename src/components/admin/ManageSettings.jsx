@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, ToggleLeft, ToggleRight, Save, Info } from 'lucide-react';
+import { Settings, ToggleLeft, ToggleRight, Save, Info, QrCode } from 'lucide-react';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
 
 const DEFAULT_SETTINGS = {
   serviceCharge: { enabled: false, rate: 10 },
-  vat: { enabled: false, rate: 7 }
+  vat: { enabled: false, rate: 7 },
+  promptPayId: ''
 };
 
 const ToggleBtn = ({ checked, onChange }) => (
@@ -145,6 +146,31 @@ const ManageSettings = () => {
           </div>
         </div>
       )}
+
+      {/* PromptPay (QR ชำระเงิน) Card */}
+      <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <div style={{ marginBottom: '1rem' }}>
+          <h3 style={{ color: 'white', margin: '0 0 0.3rem', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <QrCode size={18} color="#60a5fa" /> พร้อมเพย์ (QR ชำระเงิน)
+          </h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', margin: 0 }}>
+            เลขที่ใช้สร้าง QR ในหน้าชำระเงิน (เงินโอน) — เบอร์มือถือ หรือ เลขบัตรประชาชน/ผู้เสียภาษี
+          </p>
+        </div>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={settings.promptPayId || ''}
+          onChange={(e) => { setSettings(prev => ({ ...prev, promptPayId: e.target.value.replace(/[^0-9]/g, '') })); setSaved(false); }}
+          placeholder="เช่น 3101600936940 หรือ 0812345678"
+          style={{ width: '100%', padding: '0.7rem 0.9rem', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', color: 'white', fontSize: '1.05rem', fontWeight: '700', letterSpacing: '0.04em', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+        />
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0.6rem 0 0' }}>
+          {settings.promptPayId
+            ? '✅ จะใช้เลขนี้สร้าง QR พร้อมยอดที่ต้องชำระ'
+            : 'ℹ️ ถ้าเว้นว่าง จะใช้ค่าเริ่มต้น 3101600936940'}
+        </p>
+      </div>
 
       <button
         onClick={handleSave}
