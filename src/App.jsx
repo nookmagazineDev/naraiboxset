@@ -18,6 +18,7 @@ import ManageStock from './components/admin/ManageStock';
 import ManageBOM from './components/admin/ManageBOM';
 import TableSelection from './components/TableSelection';
 import PaymentApprovalListener from './components/PaymentApprovalListener';
+import OutstandingBills from './components/OutstandingBills';
 import TableOrderView from './components/TableOrderView';
 import LoginScreen from './components/LoginScreen';
 import LiquorStorage from './components/LiquorStorage';
@@ -75,8 +76,57 @@ function App() {
     setShiftModalMode(null);
   };
 
-  const handleCloseShift = async (closeCash, note) => {
+  // โต๊ะที่ยังไม่ชำระ (ใช้ตอนปิดกะ → บิลค้าง)
+  const getPendingTables = () => {
+    const pending = (tableOrders || []).filter(o => o.Status !== 'paid');
+    const map = {};
+    pending.forEach(o => {
+      const t = String(o.TableNumber);
+      if (!map[t]) map[t] = { tableNo: t, count: 0, total: 0, items: [] };
+      map[t].count += Number(o.Quantity) || 1;
+      map[t].total += (Number(o.ItemPrice) || 0) * (Number(o.Quantity) || 1);
+      map[t].items.push(o);
+    });
+    return Object.values(map).sort((a, b) => String(a.tableNo).localeCompare(String(b.tableNo), 'th', { numeric: true }));
+  };
+
+  const handleCloseShift = async (closeCash, note, billInfo = {}) => {
     if (!currentShift) return;
+
+    // สร้างบิลค้างจากโต๊ะที่ยังไม่ชำระ
+    const pendingTables = getPendingTables();
+    const createdAt = getThaiTimeISO();
+    const bills = pendingTables.map(t => {
+      const info = billInfo[t.tableNo] || {};
+      return {
+        id: `OB-${currentShift.id}-${t.tableNo}`,
+        shiftId: currentShift.id,
+        tableNo: t.tableNo,
+        customerName: (info.name || '').trim(),
+        phone: (info.phone || '').trim(),
+        total: t.total,
+        items: t.items,
+        createdAt,
+        status: 'unpaid'
+      };
+    });
+
+    if (bills.length > 0) {
+      // เก็บลง localStorage ทันที (ให้หน้าบิลค้างแสดงได้เลย)
+      try {
+        const prev = JSON.parse(localStorage.getItem('outstanding_bills') || '[]');
+        localStorage.setItem('outstanding_bills', JSON.stringify([...prev, ...bills]));
+      } catch (e) {}
+      // บันทึกขึ้นเซิร์ฟเวอร์ + ล้างโต๊ะทั้งหมด
+      try {
+        await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'saveOutstandingBills', bills }) });
+        await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'clearAllTableOrders' }) });
+      } catch (e) {}
+      // เคลียร์โต๊ะในเครื่อง + ลบจำนวนลูกค้า
+      setTableOrders(prev => prev.filter(o => o.Status === 'paid'));
+      pendingTables.forEach(t => localStorage.removeItem('customer_count_' + t.tableNo));
+    }
+
     try {
       await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'closeShift', shiftId: currentShift.id, staff: currentUser?.username || '', closeCash, note, ...shiftSales }) });
     } catch (e) {}
@@ -816,6 +866,13 @@ function App() {
             >
               🍾 {lang === 'th' ? 'ฝาก/เบิกเหล้า' : 'Liquor Storage'}
             </button>
+            {/* Outstanding bills button */}
+            <button
+              onClick={() => navigate('/outstanding')}
+              style={{ position: 'fixed', bottom: '9.5rem', right: '1.5rem', zIndex: 100, background: '#b45309', border: 'none', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(180,83,9,0.4)' }}
+            >
+              🧾 {lang === 'th' ? 'รายการบิลค้าง' : 'Outstanding Bills'}
+            </button>
             {/* Admin / backend button — admin & cashier */}
             {(isAdmin || isCashier) && (
               <button
@@ -994,6 +1051,10 @@ function App() {
           />
         } />
 
+        <Route path="/outstanding" element={
+          <OutstandingBills lang={lang} onBack={() => navigate('/table-select')} />
+        } />
+
         <Route path="/liquor" element={
           <LiquorStorage
             currentUser={currentUser}
@@ -1049,6 +1110,7 @@ function App() {
           currentShift={currentShift}
           shiftSales={shiftSales}
           currentUser={currentUser}
+          pendingTables={shiftModalMode === 'close' ? getPendingTables() : []}
           onConfirmOpen={handleOpenShift}
           onConfirmClose={handleCloseShift}
           onClose={() => setShiftModalMode(null)}

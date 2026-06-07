@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
 import { Clock, X, CheckCircle } from 'lucide-react';
 
-const ShiftModal = ({ mode, currentShift, shiftSales, currentUser, onConfirmOpen, onConfirmClose, onClose }) => {
+const ShiftModal = ({ mode, currentShift, shiftSales, currentUser, pendingTables = [], onConfirmOpen, onConfirmClose, onClose }) => {
   const [openCash, setOpenCash]   = useState('');
   const [closeCash, setCloseCash] = useState('');
   const [note, setNote]           = useState('');
   const [saving, setSaving]       = useState(false);
+  const [billInfo, setBillInfo]   = useState({}); // { [tableNo]: { name, phone } }
+
+  const setInfo = (tableNo, field, value) => {
+    setBillInfo(prev => ({ ...prev, [tableNo]: { ...prev[tableNo], [field]: value } }));
+  };
+  const pendingTotal = pendingTables.reduce((s, t) => s + (Number(t.total) || 0), 0);
 
   const fmt  = (n) => (Number(n) || 0).toLocaleString('th-TH');
   const fmtD = (ts) => {
@@ -23,7 +29,7 @@ const ShiftModal = ({ mode, currentShift, shiftSales, currentUser, onConfirmOpen
   const handleConfirm = async () => {
     setSaving(true);
     if (mode === 'open') await onConfirmOpen(Number(openCash) || 0);
-    else                 await onConfirmClose(Number(closeCash) || 0, note);
+    else                 await onConfirmClose(Number(closeCash) || 0, note, billInfo);
     setSaving(false);
   };
 
@@ -110,6 +116,33 @@ const ShiftModal = ({ mode, currentShift, shiftSales, currentUser, onConfirmOpen
                       {cashDiff !== null && cashDiff >= 0 ? '+' : ''}{cashDiff !== null ? `฿${fmt(cashDiff)}` : '—'}
                       {cashDiff !== null && (Math.abs(cashDiff) < 1 ? ' ✓ ตรง' : cashDiff > 0 ? ' (เกิน)' : ' (ขาด)')}
                     </span>
+                  </div>
+                </div>
+              )}
+
+              {/* บิลค้าง: โต๊ะที่ยังไม่ชำระ */}
+              {pendingTables.length > 0 && (
+                <div style={{ background: 'rgba(180,83,9,0.1)', border: '1px solid rgba(180,83,9,0.35)', borderRadius: 10, padding: '0.9rem 1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                    <span style={{ color: '#fbbf24', fontWeight: 700, fontSize: '0.9rem' }}>🧾 บิลค้าง {pendingTables.length} โต๊ะ</span>
+                    <span style={{ color: '#fbbf24', fontWeight: 800 }}>฿{fmt(pendingTotal)}</span>
+                  </div>
+                  <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.76rem', margin: '0 0 0.75rem' }}>
+                    กรอกชื่อ/เบอร์ลูกค้าของบิลที่ค้างไว้ — เมื่อปิดกะ โต๊ะทั้งหมดจะถูกเคลียร์และย้ายไปที่ "รายการบิลค้าง"
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {pendingTables.map(t => (
+                      <div key={t.tableNo} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: 8, padding: '0.7rem 0.8rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.85rem' }}>
+                          <strong style={{ color: 'white' }}>โต๊ะ {t.tableNo}</strong>
+                          <span style={{ color: 'rgba(255,255,255,0.6)' }}>{t.count} รายการ · ฿{fmt(t.total)}</span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <input style={{ ...inp, padding: '0.5rem 0.7rem', fontSize: '0.9rem' }} placeholder="ชื่อลูกค้า" value={billInfo[t.tableNo]?.name || ''} onChange={e => setInfo(t.tableNo, 'name', e.target.value)} />
+                          <input style={{ ...inp, padding: '0.5rem 0.7rem', fontSize: '0.9rem' }} placeholder="เบอร์โทร" type="tel" value={billInfo[t.tableNo]?.phone || ''} onChange={e => setInfo(t.tableNo, 'phone', e.target.value)} />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

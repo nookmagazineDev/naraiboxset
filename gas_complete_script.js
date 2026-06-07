@@ -30,6 +30,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
   getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'phone', 'productName', 'qty', 'note', 'staff', 'category', 'unit']);
   getOrCreateSheet(ss, 'PaymentApprovals', ['id', 'timestamp', 'tableNo', 'orderNumber', 'amount', 'requestedBy', 'status', 'approver', 'respondedAt']);
+  getOrCreateSheet(ss, 'OutstandingBills', ['id', 'shiftId', 'tableNo', 'customerName', 'phone', 'total', 'items', 'createdAt', 'status']);
   getOrCreateSheet(ss, 'Shifts', ['id', 'openTime', 'closeTime', 'openStaff', 'closeStaff', 'openCash', 'closeCash', 'totalSales', 'totalCash', 'totalCard', 'totalTransfer', 'totalOrders', 'status', 'note']);
   getOrCreateSheet(ss, 'PaymentSummary', ['timestamp', 'orderNumber', 'tableNo', 'paymentMethod', 'grandTotal', 'staff', 'shiftId', 'splitDetail']);
 }
@@ -98,6 +99,10 @@ function doGet(e) {
       return t >= cutoff;
     });
     return _bomJson({ success: true, approvals: recent });
+  }
+
+  if (action === 'getOutstandingBills') {
+    return _bomJson({ success: true, bills: getSheetDataAsObjects(ss, 'OutstandingBills') });
   }
   if (action === 'getStock')         return _bomJson(getStockLevels());
   if (action === 'getIngredients')   return _bomJson(getIngredientsList());
@@ -197,6 +202,34 @@ function doPost(e) {
       sheet.appendRow([tableNumber, sessionId, item.food.name || '', item.food.nameEn || '', Number(item.food.price) || 0, Number(item.quantity) || 1, parts.join(', '), timestamp, 'pending', recordedBy]);
     });
     return _bomJson({ success: true, sessionId: sessionId });
+  }
+
+  // บันทึกบิลค้าง (ตอนปิดกะมีโต๊ะยังไม่ชำระ)
+  if (action === 'saveOutstandingBills') {
+    var sh = getOrCreateSheet(ss, 'OutstandingBills', ['id', 'shiftId', 'tableNo', 'customerName', 'phone', 'total', 'items', 'createdAt', 'status']);
+    (postData.bills || []).forEach(function(b) {
+      sh.appendRow([
+        b.id || ('OB-' + Date.now() + '-' + b.tableNo),
+        b.shiftId || '', String(b.tableNo || ''), b.customerName || '', b.phone || '',
+        Number(b.total) || 0,
+        typeof b.items === 'string' ? b.items : JSON.stringify(b.items || []),
+        b.createdAt || new Date().toISOString(),
+        b.status || 'unpaid'
+      ]);
+    });
+    return _bomJson({ success: true });
+  }
+
+  // ล้างรายการโต๊ะทั้งหมดที่ยังไม่ชำระ (ตอนปิดกะ)
+  if (action === 'clearAllTableOrders') {
+    var sheetA = ss.getSheetByName('TableOrders');
+    if (sheetA) {
+      var dataA = sheetA.getDataRange().getValues();
+      for (var i = dataA.length - 1; i >= 1; i--) {
+        if (dataA[i][8] !== 'paid') sheetA.deleteRow(i + 1);
+      }
+    }
+    return _bomJson({ success: true });
   }
 
   if (action === 'clearTableOrders') {
