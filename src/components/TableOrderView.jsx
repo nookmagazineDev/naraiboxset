@@ -22,7 +22,12 @@ const TableOrderView = ({
   isRefreshing,
   onMoveMerge,
   currentUser,
-  settings = {}
+  settings = {},
+  customerType = '',
+  setCustomerType,
+  customerName = '',
+  setCustomerName,
+  customerTypeOptions = ['']
 }) => {
   const [showActionModal, setShowActionModal] = useState(false);
   const [actionType, setActionType] = useState(''); // 'move' | 'merge' | 'split'
@@ -217,6 +222,46 @@ const TableOrderView = ({
         >
           <RefreshCw size={18} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
         </button>
+      </div>
+
+      {/* Customer type + name (เชื่อมกับหน้าสั่งอาหาร) */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap',
+        padding: '0.75rem 1.25rem',
+        background: 'rgba(255,255,255,0.03)',
+        borderBottom: '1px solid rgba(255,255,255,0.07)'
+      }}>
+        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>
+          👤 {lang === 'th' ? 'ประเภทลูกค้า' : 'Customer'}
+        </span>
+        <select
+          value={customerType}
+          onChange={(e) => setCustomerType && setCustomerType(e.target.value)}
+          style={{
+            padding: '0.5rem 0.75rem', borderRadius: '8px',
+            background: 'rgba(255,255,255,0.08)', color: 'white',
+            border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.9rem',
+            fontWeight: 700, cursor: 'pointer', maxWidth: '160px'
+          }}
+        >
+          {customerTypeOptions.map(t => (
+            <option key={t || 'normal'} value={t} style={{ color: '#000' }}>
+              {t || (lang === 'th' ? 'ปกติ' : 'Normal')}
+            </option>
+          ))}
+        </select>
+        <input
+          type="text"
+          value={customerName}
+          onChange={(e) => setCustomerName && setCustomerName(e.target.value)}
+          placeholder={lang === 'th' ? 'ชื่อลูกค้า (ถ้ามี)' : 'Customer name (optional)'}
+          style={{
+            padding: '0.5rem 0.75rem', borderRadius: '8px',
+            background: 'rgba(255,255,255,0.08)', color: 'white',
+            border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.9rem',
+            width: '180px', flexShrink: 0
+          }}
+        />
       </div>
 
       {/* Order Items */}

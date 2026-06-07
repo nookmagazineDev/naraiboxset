@@ -832,6 +832,11 @@ function App() {
               onRefresh={refreshTableOrders}
               isRefreshing={isRefreshing}
               onMoveMerge={handleMoveMergeTable}
+              customerType={customerType}
+              setCustomerType={setCustomerType}
+              customerName={customerName}
+              setCustomerName={setCustomerName}
+              customerTypeOptions={customerTypeOptions}
             />
         } />
 
