@@ -3,7 +3,8 @@ import { Wine, Plus, ArrowDownCircle, ArrowUpCircle, RefreshCw, X, Save, Chevron
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
 
-const EMPTY_FORM = { customerName: '', phone: '', productName: '', qty: '', note: '' };
+const EMPTY_FORM = { customerName: '', phone: '', productName: '', category: 'เหล้า', qty: '', unit: '%', note: '' };
+const LIQUOR_UNITS = ['%', 'ml', 'ขวด', 'ส่วน'];
 
 const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
   const [records, setRecords]           = useState([]);
@@ -30,12 +31,16 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
   // คำนวณสต็อกคงเหลือต่อลูกค้า/สินค้า
   const stockMap = {};
   records.forEach(r => {
-    const key = `${r.customerName}||${r.productName}`;
+    const category = r.category || 'เหล้า';
+    const unit = r.unit || 'ขวด';
+    const key = `${r.customerName}||${r.productName}||${category}||${unit}`;
     if (!stockMap[key]) {
       stockMap[key] = {
         customerName: r.customerName,
         phone:        r.phone || '',
         productName:  r.productName,
+        category,
+        unit,
         qty:          0,
         lastDepositAt:    null,
         lastDepositStaff: '',
@@ -94,6 +99,8 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
           customerName: confirmItem.customerName,
           phone:        confirmItem.phone || '',
           productName:  confirmItem.productName,
+          category:     confirmItem.category || 'เหล้า',
+          unit:         confirmItem.unit || 'ขวด',
           qty:          confirmItem.qty,
           note:         '',
           staff:        currentUser?.username || 'ไม่ระบุ',
@@ -105,6 +112,8 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
         customerName: confirmItem.customerName,
         phone:        confirmItem.phone || '',
         productName:  confirmItem.productName,
+        category:     confirmItem.category || 'เหล้า',
+        unit:         confirmItem.unit || 'ขวด',
         qty:          confirmItem.qty,
         note:         '',
         staff:        currentUser?.username || 'ไม่ระบุ',
@@ -122,6 +131,8 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
       setSaveMsg('กรุณากรอกชื่อลูกค้า สินค้า และจำนวน');
       return;
     }
+    const isBeer = form.category === 'เบียร์';
+    const unit = isBeer ? 'ขวด' : (form.unit || '%');
     setSaving(true);
     setSaveMsg('');
     try {
@@ -135,6 +146,8 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
           customerName: form.customerName.trim(),
           phone:        form.phone.trim(),
           productName:  form.productName.trim(),
+          category:     form.category,
+          unit,
           qty:          Number(form.qty),
           note:         form.note.trim(),
           staff:        currentUser?.username || 'ไม่ระบุ',
@@ -146,6 +159,8 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
         customerName: form.customerName.trim(),
         phone:        form.phone.trim(),
         productName:  form.productName.trim(),
+        category:     form.category,
+        unit,
         qty:          Number(form.qty),
         note:         form.note.trim(),
         staff:        currentUser?.username || 'ไม่ระบุ',
@@ -220,10 +235,15 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
                 <div key={i} style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                   <div style={{ background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 10, padding: '0.6rem 1rem', textAlign: 'center', minWidth: 70 }}>
                     <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#a78bfa', lineHeight: 1 }}>{item.qty}</div>
-                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>ขวด</div>
+                    <div style={{ fontSize: '0.7rem', color: 'rgba(255,255,255,0.45)', marginTop: 2 }}>{item.unit || 'ขวด'}</div>
                   </div>
                   <div style={{ flex: 1, minWidth: 160 }}>
-                    <div style={{ fontWeight: 800, fontSize: '1rem', color: 'white' }}>{item.customerName}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <div style={{ fontWeight: 800, fontSize: '1rem', color: 'white' }}>{item.customerName}</div>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.1rem 0.5rem', borderRadius: 20, background: item.category === 'เบียร์' ? 'rgba(234,179,8,0.15)' : 'rgba(168,85,247,0.15)', color: item.category === 'เบียร์' ? '#eab308' : '#a78bfa', border: `1px solid ${item.category === 'เบียร์' ? 'rgba(234,179,8,0.3)' : 'rgba(168,85,247,0.3)'}` }}>
+                        {item.category === 'เบียร์' ? '🍺 เบียร์' : '🥃 เหล้า'}
+                      </span>
+                    </div>
                     {item.phone && <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.78rem', marginTop: 1 }}>📞 {item.phone}</div>}
                     <div style={{ color: '#a78bfa', fontWeight: 600, fontSize: '0.9rem', marginTop: 2 }}>{item.productName}</div>
                     {item.lastDepositAt && (
@@ -276,8 +296,11 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
                       </td>
                       <td style={{ padding: '0.7rem 1rem', fontWeight: 600 }}>{r.customerName}</td>
                       <td style={{ padding: '0.7rem 1rem', color: 'rgba(255,255,255,0.5)', fontSize: '0.82rem' }}>{r.phone || '—'}</td>
-                      <td style={{ padding: '0.7rem 1rem', color: '#a78bfa' }}>{r.productName}</td>
-                      <td style={{ padding: '0.7rem 1rem', fontWeight: 700, textAlign: 'center' }}>{r.qty}</td>
+                      <td style={{ padding: '0.7rem 1rem', color: '#a78bfa' }}>
+                        {r.productName}
+                        {r.category && <span style={{ marginLeft: 6, fontSize: '0.72rem', color: r.category === 'เบียร์' ? '#eab308' : 'rgba(255,255,255,0.4)' }}>({r.category})</span>}
+                      </td>
+                      <td style={{ padding: '0.7rem 1rem', fontWeight: 700, textAlign: 'center' }}>{r.qty} {r.unit || ''}</td>
                       <td style={{ padding: '0.7rem 1rem', color: 'rgba(255,255,255,0.5)', fontSize: '0.82rem' }}>{r.note || '—'}</td>
                       <td style={{ padding: '0.7rem 1rem' }}>
                         <span style={{ color: r.type === 'ฝาก' ? '#22c55e' : '#f97316', fontWeight: 600, fontSize: '0.82rem' }}>{r.staff || '—'}</span>
@@ -326,7 +349,7 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '0.5rem', marginTop: '0.25rem' }}>
                 <span style={{ color: 'rgba(255,255,255,0.5)' }}>จำนวนที่เบิก</span>
-                <strong style={{ color: '#f97316', fontSize: '1.1rem' }}>{confirmItem.qty} ขวด</strong>
+                <strong style={{ color: '#f97316', fontSize: '1.1rem' }}>{confirmItem.qty} {confirmItem.unit || 'ขวด'}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
                 <span style={{ color: 'rgba(255,255,255,0.4)' }}>พนักงาน</span>
@@ -376,10 +399,47 @@ const LiquorStorage = ({ currentUser, lang = 'th', onBack }) => {
                 <input style={inputStyle} placeholder="เช่น Johnnie Walker Black" value={form.productName} onChange={e => setForm(f => ({ ...f, productName: e.target.value }))} />
               </div>
 
+              {/* เลือกประเภท: เหล้า / เบียร์ */}
               <div>
-                <label style={labelStyle}>จำนวน (ขวด) *</label>
-                <input type="number" min="1" style={{ ...inputStyle }} placeholder="0" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))} />
+                <label style={labelStyle}>ประเภท *</label>
+                <div style={{ display: 'flex', gap: '0.6rem' }}>
+                  {[
+                    { key: 'เหล้า', label: '🥃 เหล้า', color: '#a78bfa', bg: 'rgba(168,85,247,0.18)', bd: 'rgba(168,85,247,0.6)' },
+                    { key: 'เบียร์', label: '🍺 เบียร์', color: '#eab308', bg: 'rgba(234,179,8,0.18)', bd: 'rgba(234,179,8,0.6)' },
+                  ].map(c => {
+                    const active = form.category === c.key;
+                    return (
+                      <button
+                        key={c.key}
+                        onClick={() => setForm(f => ({ ...f, category: c.key, qty: '', unit: c.key === 'เบียร์' ? 'ขวด' : '%' }))}
+                        style={{ flex: 1, padding: '0.7rem', borderRadius: 10, border: '1.5px solid', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, fontSize: '0.95rem', background: active ? c.bg : 'rgba(255,255,255,0.04)', borderColor: active ? c.bd : 'rgba(255,255,255,0.12)', color: active ? c.color : 'rgba(255,255,255,0.5)' }}
+                      >
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+
+              {form.category === 'เบียร์' ? (
+                <div>
+                  <label style={labelStyle}>จำนวน (ขวด) *</label>
+                  <input type="number" min="1" step="1" style={inputStyle} placeholder="0" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))} />
+                </div>
+              ) : (
+                <div>
+                  <label style={labelStyle}>ปริมาณที่เหลือ *</label>
+                  <div style={{ display: 'flex', gap: '0.6rem' }}>
+                    <input type="number" min="0" step="any" style={{ ...inputStyle, flex: 1 }} placeholder="เช่น 70" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))} />
+                    <select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} style={{ ...inputStyle, width: 110, flexShrink: 0, cursor: 'pointer' }}>
+                      {LIQUOR_UNITS.map(u => <option key={u} value={u} style={{ color: '#000' }}>{u}</option>)}
+                    </select>
+                  </div>
+                  <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', margin: '0.4rem 0 0' }}>
+                    เช่น เหลือ 70% / 350 ml / 0.5 ขวด
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label style={labelStyle}>หมายเหตุ</label>

@@ -28,7 +28,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Discounts', ['id', 'name', 'type', 'value', 'categories']);
   getOrCreateSheet(ss, 'Settings', ['key', 'value']);
   getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
-  getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'phone', 'productName', 'qty', 'note', 'staff']);
+  getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'phone', 'productName', 'qty', 'note', 'staff', 'category', 'unit']);
   getOrCreateSheet(ss, 'Shifts', ['id', 'openTime', 'closeTime', 'openStaff', 'closeStaff', 'openCash', 'closeCash', 'totalSales', 'totalCash', 'totalCard', 'totalTransfer', 'totalOrders', 'status', 'note']);
   getOrCreateSheet(ss, 'PaymentSummary', ['timestamp', 'orderNumber', 'tableNo', 'paymentMethod', 'grandTotal', 'staff', 'shiftId', 'splitDetail']);
 }
@@ -416,8 +416,11 @@ function doPost(e) {
   }
 
   if (action === 'saveLiquorRecord') {
-    var sh = getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'productName', 'qty', 'note', 'staff']);
-    sh.appendRow([new Date().toISOString(), postData.type || 'ฝาก', postData.customerName || '', postData.phone || '', postData.productName || '', Number(postData.qty) || 0, postData.note || '', postData.staff || '']);
+    var liquorHeaders = ['timestamp', 'type', 'customerName', 'phone', 'productName', 'qty', 'note', 'staff', 'category', 'unit'];
+    var sh = getOrCreateSheet(ss, 'LiquorStorage', liquorHeaders);
+    // migrate header for old sheets ให้รองรับ category/unit
+    sh.getRange(1, 1, 1, liquorHeaders.length).setValues([liquorHeaders]);
+    sh.appendRow([new Date().toISOString(), postData.type || 'ฝาก', postData.customerName || '', postData.phone || '', postData.productName || '', Number(postData.qty) || 0, postData.note || '', postData.staff || '', postData.category || 'เหล้า', postData.unit || 'ขวด']);
     return _bomJson({ success: true });
   }
 
