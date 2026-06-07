@@ -37,9 +37,9 @@ const PaymentApprovalListener = ({ currentUser, lang = 'th' }) => {
   if (pending.length === 0) return null;
 
   return (
-    <div style={{ position: 'fixed', top: '1rem', right: '1rem', zIndex: 3000, display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '360px', width: 'calc(100% - 2rem)' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', padding: '1rem', overflowY: 'auto' }}>
       {pending.map(a => (
-        <div key={a.id} style={{ background: '#11182f', border: '1px solid rgba(96,165,250,0.5)', borderRadius: '14px', padding: '1rem 1.1rem', boxShadow: '0 10px 40px rgba(0,0,0,0.6)', animation: 'spin-none 0s' }}>
+        <div key={a.id} style={{ background: '#11182f', border: '1px solid rgba(96,165,250,0.5)', borderRadius: '16px', padding: '1.5rem 1.6rem', boxShadow: '0 20px 60px rgba(0,0,0,0.7)', width: '100%', maxWidth: '380px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem', color: '#60a5fa', fontWeight: 800 }}>
             <BellRing size={18} style={{ animation: 'spin 1.2s ease-in-out infinite' }} />
             {lang === 'th' ? 'ขออนุมัติชำระด้วย QR' : 'QR Payment Approval'}
