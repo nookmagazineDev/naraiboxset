@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Clock, X, CheckCircle } from 'lucide-react';
+import { Clock, X, CheckCircle, Printer } from 'lucide-react';
+import { print80mm } from '../utils/print80mm';
 
 const ShiftModal = ({ mode, currentShift, shiftSales, currentUser, pendingTables = [], onConfirmOpen, onConfirmClose, onClose }) => {
   const [openCash, setOpenCash]   = useState('');
@@ -31,6 +32,42 @@ const ShiftModal = ({ mode, currentShift, shiftSales, currentUser, pendingTables
     if (mode === 'open') await onConfirmOpen(Number(openCash) || 0);
     else                 await onConfirmClose(Number(closeCash) || 0, note, billInfo);
     setSaving(false);
+  };
+
+  const buildShiftReportHtml = () => {
+    const line = (k, v) => `<div class="row"><span>${k}</span><span>${v}</span></div>`;
+    const pendingRows = pendingTables.map(t => {
+      const info = billInfo[t.tableNo] || {};
+      const who = [info.name, info.phone].filter(Boolean).join(' ');
+      return `<div class="it"><div class="row"><span>โต๊ะ ${t.tableNo}${who ? ' · ' + who : ''}</span><span>฿${fmt(t.total)}</span></div></div>`;
+    }).join('');
+    return `
+      <div class="c xl">เสน่ห์</div>
+      <div class="c sm">รายงานปิดกะ / SHIFT REPORT</div>
+      <div class="hr"></div>
+      ${line('กะ', currentShift?.id || '-')}
+      ${line('เปิดกะ', fmtD(currentShift?.openTime))}
+      ${line('โดย', currentShift?.openStaff || '-')}
+      ${line('ปิดกะ', fmtD(new Date().toISOString()))}
+      ${line('ปิดโดย', currentUser?.username || '-')}
+      <div class="hr"></div>
+      <div class="b">ยอดขาย</div>
+      ${line('ยอดขายรวม', `฿${fmt(sales.totalSales)}`)}
+      ${line('จำนวนบิล', `${sales.totalOrders || 0} บิล`)}
+      ${line('เงินสด', `฿${fmt(sales.totalCash)}`)}
+      ${line('โอน / QR', `฿${fmt(sales.totalTransfer)}`)}
+      ${line('บัตรเครดิต', `฿${fmt(sales.totalCard)}`)}
+      <div class="hr"></div>
+      <div class="b">สรุปเงินสด</div>
+      ${line('เงินเปิดกะ', `฿${fmt(openCashAmt)}`)}
+      ${line('รับเงินสด', `฿${fmt(cashReceived)}`)}
+      ${line('เงินในลิ้นชักปิด', `฿${fmt(closeAmt)}`)}
+      ${line('ส่วนต่าง', cashDiff !== null ? `฿${fmt(cashDiff)}` : '-')}
+      ${pendingTables.length > 0 ? `<div class="hr"></div><div class="b">บิลค้าง ${pendingTables.length} โต๊ะ (฿${fmt(pendingTotal)})</div>${pendingRows}` : ''}
+      ${note ? `<div class="hr"></div><div>หมายเหตุ: ${note}</div>` : ''}
+      <div class="hr"></div>
+      <div class="c sm">${new Date().toLocaleString('th-TH')}</div>
+    `;
   };
 
   const inp = { width: '100%', padding: '0.7rem 0.9rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, color: 'white', fontSize: '1rem', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' };
@@ -152,6 +189,14 @@ const ShiftModal = ({ mode, currentShift, shiftSales, currentUser, pendingTables
                 <label style={lbl}>หมายเหตุ (ถ้ามี)</label>
                 <input style={inp} placeholder="หมายเหตุ..." value={note} onChange={e => setNote(e.target.value)} />
               </div>
+
+              {/* พิมพ์รายงานปิดกะ 80mm */}
+              <button
+                onClick={() => print80mm(buildShiftReportHtml())}
+                style={{ width: '100%', padding: '0.75rem', background: 'rgba(96,165,250,0.12)', border: '1.5px solid rgba(96,165,250,0.4)', borderRadius: 10, color: '#60a5fa', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+              >
+                <Printer size={17} /> พิมพ์รายงานปิดกะ (80mm)
+              </button>
             </>
           )}
         </div>

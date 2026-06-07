@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { X, CheckCircle, ArrowLeft, CreditCard, Banknote, Smartphone, Tag, ChevronRight, Split, Clock, Camera, Upload } from 'lucide-react';
 import { generatePromptPayPayload } from '../utils/promptpay';
+import { print80mm, scopedSlipCss } from '../utils/print80mm';
+import { Printer } from 'lucide-react';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
 
@@ -87,9 +89,7 @@ const CheckoutModal = ({
       try { await uploadSlip(slipPreview); } catch (e) {}
       setSlipUploading(false);
     }
-    const pc = pendingComplete || { method: 'เงินโอน' };
     setPaymentStep('success');
-    setTimeout(() => onComplete(grand, pc.method, pc.details), 2500);
   };
 
   // แยกจ่าย (split payment)
@@ -177,31 +177,67 @@ const CheckoutModal = ({
   const splitValid = splitRemaining === 0 && splitSum > 0 && [splitCashN, splitTransferN, splitCardN].filter(v => v > 0).length >= 2;
 
   const handleConfirmPayment = (method) => {
-    if (method === 'เงินสด') {
-      onComplete(grand, method);
-    } else if (method === 'เงินโอน') {
+    if (method === 'เงินโอน') {
       // โอน/สแกนจ่าย → ไปขั้นแนบสลิปก่อน
       setPendingComplete({ method: 'เงินโอน' });
       setSlipPreview('');
       setPaymentStep('slip');
     } else {
+      setPendingComplete({ method });
       setPaymentStep('success');
-      setTimeout(() => onComplete(grand, method), 4500);
     }
   };
 
   const handleConfirmSplit = () => {
     if (!splitValid) return;
     const details = { cash: splitCashN, transfer: splitTransferN, card: splitCardN };
+    setPendingComplete({ method: 'แยกจ่าย', details });
     if (splitTransferN > 0) {
       // มีการโอน → ต้องแนบสลิป
-      setPendingComplete({ method: 'แยกจ่าย', details });
       setSlipPreview('');
       setPaymentStep('slip');
     } else {
       setPaymentStep('success');
-      setTimeout(() => onComplete(grand, 'แยกจ่าย', details), 4500);
     }
+  };
+
+  // ── ใบเสร็จ 80mm (พรีวิว + พิมพ์) ──
+  const paidMethod = pendingComplete?.method || '';
+  const buildReceiptHtml = () => {
+    const now = new Date().toLocaleString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const rows = (tableOrderItems || []).map(it => {
+      const qty = Number(it.Quantity) || 1;
+      const price = (Number(it.ItemPrice) || 0) * qty;
+      const name = it.ItemName || '';
+      const opt = it.Options ? `<div class="opt">${it.Options}</div>` : '';
+      return `<div class="it"><div class="row"><span>${qty}× ${name}</span><span>฿${price.toLocaleString()}</span></div>${opt}</div>`;
+    }).join('');
+    const line = (k, v, cls = '') => `<div class="row ${cls}"><span>${k}</span><span>${v}</span></div>`;
+    return `
+      <div class="c xl">เสน่ห์</div>
+      <div class="c sm">ใบเสร็จรับเงิน / RECEIPT</div>
+      <div class="hr"></div>
+      ${line('บิลเลขที่', orderNumber || '-')}
+      ${tableNo ? line('โต๊ะ', tableNo) : ''}
+      ${line('วันที่', now)}
+      ${paidMethod ? line('ชำระโดย', paidMethod) : ''}
+      <div class="hr"></div>
+      ${rows}
+      <div class="hr"></div>
+      ${(hasDiscount || hasCharges) ? line('ยอดอาหาร', `฿${subtotal.toLocaleString()}`) : ''}
+      ${hasDiscount ? line(`ส่วนลด ${selectedDiscount?.name || ''}`, `-฿${discountAmount.toLocaleString()}`) : ''}
+      ${sc > 0 ? line(`เซอร์วิสชาร์จ ${settings.serviceCharge.rate}%`, `+฿${sc.toLocaleString()}`) : ''}
+      ${vat > 0 ? line(`VAT ${settings.vat.rate}%`, `+฿${vat.toLocaleString()}`) : ''}
+      <div class="hr"></div>
+      <div class="row tot"><span>รวมทั้งสิ้น</span><span>฿${grand.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></div>
+      <div class="hr"></div>
+      <div class="c sm">ขอบคุณที่ใช้บริการ</div>
+    `;
+  };
+
+  const finalizeComplete = () => {
+    const pc = pendingComplete || { method: 'เงินสด' };
+    onComplete(grand, pc.method, pc.details);
   };
 
   const PriceBreakdown = ({ compact = false }) => (
@@ -846,16 +882,37 @@ const CheckoutModal = ({
           </>
         )}
 
-        {/* ── Step 4: Success ── */}
+        {/* ── Step 4: Success + พรีวิวใบเสร็จ ── */}
         {paymentStep === 'success' && (
-          <div className="checkout-success">
-            <CheckCircle size={64} color="#22c55e" style={{ margin: '0 auto 1rem' }} />
-            <h3 style={{ color: '#22c55e' }}>{lang === 'th' ? 'ชำระเงินสำเร็จ!' : 'Payment Successful!'}</h3>
-            <div style={{ background: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '16px', margin: '1.5rem 0', display: 'inline-block', minWidth: '80%' }}>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>{lang === 'th' ? 'หมายเลขบิล' : 'Bill Number'}</p>
-              <h1 style={{ color: 'var(--accent)', fontSize: '3rem', margin: 0 }}>{orderNumber}</h1>
+          <div style={{ textAlign: 'center' }}>
+            <CheckCircle size={48} color="#22c55e" style={{ margin: '0 auto 0.5rem' }} />
+            <h3 style={{ color: '#22c55e', margin: '0 0 0.25rem' }}>{lang === 'th' ? 'ชำระเงินสำเร็จ!' : 'Payment Successful!'}</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 0 1rem' }}>
+              {lang === 'th' ? 'พรีวิวใบเสร็จ (80mm)' : 'Receipt preview (80mm)'}
+            </p>
+
+            {/* พรีวิวใบเสร็จจริงที่จะพิมพ์ */}
+            <div style={{ background: 'white', borderRadius: '8px', width: '302px', maxWidth: '100%', margin: '0 auto 1.25rem', boxShadow: '0 8px 30px rgba(0,0,0,0.4)', textAlign: 'left', overflow: 'hidden' }}>
+              <style>{scopedSlipCss('.slip-body')}</style>
+              <div className="slip-body" dangerouslySetInnerHTML={{ __html: buildReceiptHtml() }} />
             </div>
-            <p style={{ color: 'var(--text-muted)' }}>{lang === 'th' ? 'ขอบคุณที่ใช้บริการ!' : 'Thank you for your visit!'}</p>
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                onClick={() => print80mm(buildReceiptHtml())}
+                style={{ flex: 1, padding: '0.85rem', background: 'rgba(96,165,250,0.15)', border: '1.5px solid rgba(96,165,250,0.45)', borderRadius: '12px', color: '#60a5fa', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+              >
+                <Printer size={18} /> {lang === 'th' ? 'พิมพ์ใบเสร็จ' : 'Print'}
+              </button>
+              <button
+                onClick={finalizeComplete}
+                className="confirm-btn"
+                style={{ flex: 1.4, background: '#22c55e' }}
+              >
+                <CheckCircle size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
+                {lang === 'th' ? 'เสร็จสิ้น' : 'Done'}
+              </button>
+            </div>
           </div>
         )}
 
