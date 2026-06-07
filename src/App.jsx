@@ -1,29 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, lazy, Suspense } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { ShoppingCart, ClipboardList, Store, Globe, ShoppingBag, RefreshCw } from 'lucide-react';
 import FoodCard from './components/FoodCard';
 import OrderWizardModal from './components/OrderWizardModal';
 import CartModal from './components/CartModal';
 import CheckoutModal from './components/CheckoutModal';
-import KitchenMonitor from './components/KitchenMonitor';
-import AdminLayout from './components/admin/AdminLayout';
-import Dashboard from './components/admin/Dashboard';
-import ManageMenu from './components/admin/ManageMenu';
-import ManagePromotions from './components/admin/ManagePromotions';
-import ManageCategories from './components/admin/ManageCategories';
-import ManagePrinters from './components/admin/ManagePrinters';
-import ManageUsers from './components/admin/ManageUsers';
-import ManageSettings from './components/admin/ManageSettings';
-import ManageStock from './components/admin/ManageStock';
-import ManageBOM from './components/admin/ManageBOM';
 import TableSelection from './components/TableSelection';
 import PaymentApprovalListener from './components/PaymentApprovalListener';
-import OutstandingBills from './components/OutstandingBills';
 import TableOrderView from './components/TableOrderView';
 import LoginScreen from './components/LoginScreen';
-import LiquorStorage from './components/LiquorStorage';
 import ShiftModal from './components/ShiftModal';
-import Reports from './components/admin/Reports';
+// โหลดแบบ lazy: หน้าหลังบ้าน/ครัว/เหล้า/บิลค้าง ไม่ต้องโหลดตอนเปิดหน้าร้าน → เริ่มแอปไวขึ้น
+const KitchenMonitor = lazy(() => import('./components/KitchenMonitor'));
+const AdminLayout = lazy(() => import('./components/admin/AdminLayout'));
+const Dashboard = lazy(() => import('./components/admin/Dashboard'));
+const ManageMenu = lazy(() => import('./components/admin/ManageMenu'));
+const ManagePromotions = lazy(() => import('./components/admin/ManagePromotions'));
+const ManageCategories = lazy(() => import('./components/admin/ManageCategories'));
+const ManagePrinters = lazy(() => import('./components/admin/ManagePrinters'));
+const ManageUsers = lazy(() => import('./components/admin/ManageUsers'));
+const ManageSettings = lazy(() => import('./components/admin/ManageSettings'));
+const ManageStock = lazy(() => import('./components/admin/ManageStock'));
+const ManageBOM = lazy(() => import('./components/admin/ManageBOM'));
+const Reports = lazy(() => import('./components/admin/Reports'));
+const OutstandingBills = lazy(() => import('./components/OutstandingBills'));
+const LiquorStorage = lazy(() => import('./components/LiquorStorage'));
 import { resolvePopupSource, flattenPopupConfig, getPriceOptions } from './utils/popupConfig';
 import './index.css';
 
@@ -209,12 +210,22 @@ function App() {
   const [checkoutTotal, setCheckoutTotal] = useState(0);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
+  // เก็บ JSON ของแต่ละส่วนที่ apply ไปแล้ว → อัปเดต state เฉพาะส่วนที่เปลี่ยนจริง (กัน re-render ทั้งแอปทุก 10 วิ)
+  const appliedRef = React.useRef({});
+  const lastRawRef = React.useRef('');
+  const changed = (key, value) => {
+    const json = JSON.stringify(value);
+    if (appliedRef.current[key] === json) return false;
+    appliedRef.current[key] = json;
+    return true;
+  };
+
   const processAppGASData = (data) => {
-    if (data.categories && Array.isArray(data.categories)) {
+    if (data.categories && Array.isArray(data.categories) && changed('categories', data.categories)) {
       setAllCategories(data.categories);
       setCategories(data.categories.filter(c => c.isActive !== false));
     }
-    if (data.orders && Array.isArray(data.orders)) {
+    if (data.orders && Array.isArray(data.orders) && changed('orders', data.orders)) {
       const groupedOrders = {};
       data.orders.forEach(row => {
         const num = row.OrderNumber;
@@ -252,28 +263,29 @@ function App() {
       });
       setMaxOrderNum(prev => Math.max(prev, currentMax));
     }
-    if (data.menu && Array.isArray(data.menu)) {
+    if (data.menu && Array.isArray(data.menu) && changed('menu', data.menu)) {
       // flatten per-item popupConfig JSON onto each menu item for the wizard
       const flatMenu = data.menu.map(flattenPopupConfig);
       setAllMenu(flatMenu);
       setLiveMenu(flatMenu.filter(m => m.isActive !== false));
     }
     if (data.tableOrders && Array.isArray(data.tableOrders)) {
+      // โต๊ะเป็นข้อมูลที่เปลี่ยนบ่อยและต้องตรงเสมอ → อัปเดตทุกครั้งที่ payload เปลี่ยน
       setTableOrders(data.tableOrders);
     }
-    if (data.users && Array.isArray(data.users)) {
+    if (data.users && Array.isArray(data.users) && changed('users', data.users)) {
       localStorage.setItem('cached_users', JSON.stringify(data.users));
       setUsers(data.users);
     }
-    if (data.settings && typeof data.settings === 'object') {
+    if (data.settings && typeof data.settings === 'object' && changed('settings', data.settings)) {
       localStorage.setItem('pos_settings', JSON.stringify(data.settings));
       setPosSettings(data.settings);
     }
-    if (data.printers && Array.isArray(data.printers) && data.printers.length > 0) {
+    if (data.printers && Array.isArray(data.printers) && data.printers.length > 0 && changed('printers', data.printers)) {
       localStorage.setItem('printers_config', JSON.stringify(data.printers));
       window.dispatchEvent(new Event('printers_changed'));
     }
-    if (data.discounts && Array.isArray(data.discounts) && data.discounts.length > 0) {
+    if (data.discounts && Array.isArray(data.discounts) && data.discounts.length > 0 && changed('discounts', data.discounts)) {
       localStorage.setItem('pos_discounts', JSON.stringify(data.discounts));
       setPosDiscounts(data.discounts);
     }
@@ -285,9 +297,13 @@ function App() {
     try {
       const resp = await fetch(GAS_URL + '?action=getAllData', { signal: controller.signal });
       clearTimeout(timer);
-      const data = await resp.json();
+      const text = await resp.text();
+      // ถ้าข้อมูลเหมือนเดิมเป๊ะ → ข้ามทั้งหมด (ไม่ parse/ไม่เซ็ต state/ไม่เขียน localStorage)
+      if (text === lastRawRef.current) return;
+      lastRawRef.current = text;
+      const data = JSON.parse(text);
       if (data) {
-        localStorage.setItem('gas_all_data', JSON.stringify(data));
+        localStorage.setItem('gas_all_data', text);
         processAppGASData(data);
       }
     } catch (e) {
@@ -345,14 +361,14 @@ function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   // รายการ "ประเภทลูกค้า" ทั้งหมด (รวมจากชื่อราคาของทุกเมนู) — '' = ราคาปกติ
-  const customerTypeOptions = (() => {
+  const customerTypeOptions = React.useMemo(() => {
     const names = new Set();
     (liveMenu || []).forEach(m => {
       getPriceOptions(m).forEach(o => { if (o.name && o.name.trim()) names.add(o.name.trim()); });
     });
     names.delete('ปกติ'); // ปกติ = ค่าเริ่มต้น แทนด้วย ''
     return ['', ...Array.from(names)];
-  })();
+  }, [liveMenu]);
 
   // ราคาตาม "ประเภทลูกค้า" ที่เลือก — ถ้าเมนูไม่มีประเภทนั้น ใช้ราคาปกติแทน
   const resolvePrice = (food) => {
@@ -830,6 +846,7 @@ function App() {
 
   return (
     <div className="app-container">
+      <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>{lang === 'th' ? 'กำลังโหลด...' : 'Loading...'}</div>}>
       <Routes>
         <Route path="/" element={<Navigate to="/table-select" replace />} />
 
@@ -1078,6 +1095,7 @@ function App() {
           <Route path="reports" element={isAdmin ? <Reports /> : <Navigate to="/admin" replace />} />
         </Route>
       </Routes>
+      </Suspense>
 
       {selectedFood && (
         <OrderWizardModal

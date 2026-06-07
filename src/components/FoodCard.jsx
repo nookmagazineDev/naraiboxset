@@ -1,52 +1,44 @@
 import React from 'react';
 import { Plus, Minus } from 'lucide-react';
 
+const CATEGORY_FOLDERS = {
+  "Promotion": "Promotion",
+  "SET": "กับแกล้ม3อย่าง  ทอด ต้ม ย่าง",
+  "ของกินเล่น": "ของกินเล่น",
+  "ย่าง": "ย่าง",
+  "อาหารจานเดียว": "อาหารจานเดียว",
+  "ต้ม": "ต้ม",
+  "ผัด": "ผัด",
+  "ยำ": "ยำ",
+  "เบียร์": "เบียร์",
+  "เหล้า": "เหล้า",
+  "มิกเซอร์": "มิกเซอร์",
+  "โชจู": "โชจู",
+  "cat_1779987830937": "เหล้าอะไรก๋ได้ แถมไข่ตุ๋น",
+  "cat_1779988171217": "setเจ้าสัว"
+};
+
 const FoodCard = ({ food, onOrderClick, onDecreaseClick, cartQuantity = 0, lang = 'th', displayPrice }) => {
-  const [imgType, setImgType] = React.useState('png'); // 'png' | 'svg' | 'placeholder'
   const name = lang === 'th' ? food.name : (food.nameEn || food.name);
   const desc = lang === 'th' ? food.description : (food.descriptionEn || food.description);
 
-  // Map category slugs to folder names
-  const categoryFolders = {
-    "Promotion": "Promotion",
-    "SET": "กับแกล้ม3อย่าง  ทอด ต้ม ย่าง",
-    "ของกินเล่น": "ของกินเล่น",
-    "ย่าง": "ย่าง",
-    "อาหารจานเดียว": "อาหารจานเดียว",
-    "ต้ม": "ต้ม",
-    "ผัด": "ผัด",
-    "ยำ": "ยำ",
-    "เบียร์": "เบียร์",
-    "เหล้า": "เหล้า",
-    "มิกเซอร์": "มิกเซอร์",
-    "โชจู": "โชจู",
-    "cat_1779987830937": "เหล้าอะไรก๋ได้ แถมไข่ตุ๋น",
-    "cat_1779988171217": "setเจ้าสัว"
-  };
-  const folder = categoryFolders[food.category] || food.category || 'uncategorized';
-  const sanitizedFileName = food.name.replace(/[\\/:*?"<>|]/g, '_').trim();
+  const folder = CATEGORY_FOLDERS[food.category] || food.category || 'uncategorized';
+  const sanitizedFileName = (food.name || '').replace(/[\\/:*?"<>|]/g, '_').trim();
 
-  let imageSrc = food.image;
-  if (!imageSrc) {
-    if (imgType === 'png') {
-      imageSrc = `/images/${folder}/${sanitizedFileName}.png`;
-    } else if (imgType === 'svg') {
-      imageSrc = `/images/${folder}/${sanitizedFileName}.svg`;
-    } else {
-      imageSrc = null;
-    }
-  }
+  // ลำดับรูปที่จะลองโหลด (ไม่แก้ไข object ของเมนูโดยตรง)
+  const candidates = React.useMemo(() => {
+    const list = [];
+    if (food.image) list.push(food.image);
+    list.push(`/images/${folder}/${sanitizedFileName}.png`);
+    list.push(`/images/${folder}/${sanitizedFileName}.svg`);
+    return list;
+  }, [food.image, folder, sanitizedFileName]);
 
-  const handleImageError = () => {
-    if (food.image) {
-      food.image = null; // clear it
-      setImgType('png');
-    } else if (imgType === 'png') {
-      setImgType('svg');
-    } else if (imgType === 'svg') {
-      setImgType('placeholder');
-    }
-  };
+  const [imgIdx, setImgIdx] = React.useState(0);
+  React.useEffect(() => { setImgIdx(0); }, [food.id, candidates.length]);
+
+  const imageSrc = imgIdx < candidates.length ? candidates[imgIdx] : null;
+  const handleImageError = () => setImgIdx(i => i + 1);
 
   return (
     <div
@@ -109,4 +101,4 @@ const FoodCard = ({ food, onOrderClick, onDecreaseClick, cartQuantity = 0, lang 
   );
 };
 
-export default FoodCard;
+export default React.memo(FoodCard);
