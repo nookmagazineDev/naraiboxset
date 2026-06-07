@@ -13,7 +13,7 @@ const STATUS_CONFIG = {
 const DEFAULT_STOCK_IN = { ingId: '', qty: '', pricePerUnit: '', note: '' };
 
 const ManageStock = () => {
-  const { lang } = useOutletContext();
+  const { lang, canSeeCost = true } = useOutletContext();
   const [stock, setStock] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -220,8 +220,8 @@ const ManageStock = () => {
                     <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.3rem' }}>คงเหลือ <SortIcon col="current" /></span>
                   </th>
                   <th style={{ textAlign: 'right' }}>ขั้นต่ำ</th>
-                  <th style={{ textAlign: 'right' }}>ราคา/หน่วย</th>
-                  <th style={{ textAlign: 'right' }}>มูลค่าสต็อก</th>
+                  {canSeeCost && <th style={{ textAlign: 'right' }}>ราคา/หน่วย</th>}
+                  {canSeeCost && <th style={{ textAlign: 'right' }}>มูลค่าสต็อก</th>}
                   <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => handleSort('status')}>
                     <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>สถานะ <SortIcon col="status" /></span>
                   </th>
@@ -245,12 +245,16 @@ const ManageStock = () => {
                       <td style={{ textAlign: 'right', color: 'var(--text-muted)', fontSize: '0.88rem' }}>
                         {item.minimum > 0 ? item.minimum.toLocaleString() : '—'}
                       </td>
-                      <td style={{ textAlign: 'right', fontSize: '0.88rem', color: 'var(--text-muted)' }}>
-                        {item.price > 0 ? `฿${item.price.toFixed(2)}` : '—'}
-                      </td>
-                      <td style={{ textAlign: 'right', fontSize: '0.88rem', color: stockValue > 0 ? '#60a5fa' : 'var(--text-muted)' }}>
-                        {stockValue > 0 ? `฿${stockValue.toLocaleString('th-TH', { maximumFractionDigits: 0 })}` : '—'}
-                      </td>
+                      {canSeeCost && (
+                        <td style={{ textAlign: 'right', fontSize: '0.88rem', color: 'var(--text-muted)' }}>
+                          {item.price > 0 ? `฿${item.price.toFixed(2)}` : '—'}
+                        </td>
+                      )}
+                      {canSeeCost && (
+                        <td style={{ textAlign: 'right', fontSize: '0.88rem', color: stockValue > 0 ? '#60a5fa' : 'var(--text-muted)' }}>
+                          {stockValue > 0 ? `฿${stockValue.toLocaleString('th-TH', { maximumFractionDigits: 0 })}` : '—'}
+                        </td>
+                      )}
                       <td style={{ textAlign: 'center' }}>
                         <span style={{ display: 'inline-block', padding: '0.25rem 0.6rem', borderRadius: '20px', fontSize: '0.78rem', fontWeight: '600', background: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}`, whiteSpace: 'nowrap' }}>
                           {cfg.label}
@@ -271,7 +275,7 @@ const ManageStock = () => {
           {[
             { label: 'วัตถุดิบทั้งหมด', val: `${stock.length} รายการ`, color: 'white' },
             { label: 'ใกล้หมด/หมดแล้ว', val: `${alertItems.length} รายการ`, color: alertItems.length > 0 ? '#ef4444' : '#22c55e' },
-            { label: 'มูลค่าสต็อครวม', val: `฿${stock.reduce((s, i) => s + i.current * i.price, 0).toLocaleString('th-TH', { maximumFractionDigits: 0 })}`, color: '#60a5fa' },
+            ...(canSeeCost ? [{ label: 'มูลค่าสต็อครวม', val: `฿${stock.reduce((s, i) => s + i.current * i.price, 0).toLocaleString('th-TH', { maximumFractionDigits: 0 })}`, color: '#60a5fa' }] : []),
           ].map(card => (
             <div key={card.label} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '10px', padding: '0.75rem 1.25rem', minWidth: '160px' }}>
               <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.2rem' }}>{card.label}</div>
@@ -295,10 +299,10 @@ const ManageStock = () => {
             </div>
 
             {/* แถวหัว */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 90px 120px 1fr 36px', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 0.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: canSeeCost ? '2fr 90px 120px 1fr 36px' : '2fr 90px 1fr 36px', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.78rem', color: 'var(--text-muted)', padding: '0 0.25rem' }}>
               <span>วัตถุดิบ</span>
               <span>จำนวน (หน่วยซื้อ)</span>
-              <span>ราคา/หน่วยซื้อ ฿</span>
+              {canSeeCost && <span>ราคา/หน่วยซื้อ ฿</span>}
               <span>หมายเหตุ</span>
               <span></span>
             </div>
@@ -314,7 +318,7 @@ const ManageStock = () => {
                 const showPreview = sel && qtyP > 0;
                 return (
                   <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '2fr 90px 120px 1fr 36px', gap: '0.5rem', alignItems: 'center' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: canSeeCost ? '2fr 90px 120px 1fr 36px' : '2fr 90px 1fr 36px', gap: '0.5rem', alignItems: 'center' }}>
                       <select
                         value={row.ingId}
                         onChange={e => updateStockInRow(i, 'ingId', e.target.value)}
@@ -333,12 +337,14 @@ const ManageStock = () => {
                         onChange={e => updateStockInRow(i, 'qty', e.target.value)}
                         style={{ textAlign: 'right' }}
                       />
-                      <input
-                        type="number" min="0" step="0.01" placeholder="ใช้ค่าเดิม"
-                        value={row.pricePerUnit}
-                        onChange={e => updateStockInRow(i, 'pricePerUnit', e.target.value)}
-                        style={{ textAlign: 'right' }}
-                      />
+                      {canSeeCost && (
+                        <input
+                          type="number" min="0" step="0.01" placeholder="ใช้ค่าเดิม"
+                          value={row.pricePerUnit}
+                          onChange={e => updateStockInRow(i, 'pricePerUnit', e.target.value)}
+                          style={{ textAlign: 'right' }}
+                        />
+                      )}
                       <input
                         placeholder="หมายเหตุ"
                         value={row.note}
@@ -352,7 +358,7 @@ const ManageStock = () => {
                     {showPreview && (
                       <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', paddingLeft: '0.25rem' }}>
                         ➜ เข้าสต็อก <strong style={{ color: '#22c55e' }}>{usageQty.toLocaleString()} {sel.unit}</strong>
-                        {usageCost != null && <> · ต้นทุน <strong style={{ color: '#60a5fa' }}>฿{usageCost.toLocaleString(undefined, { maximumFractionDigits: 4 })}/{sel.unit}</strong></>}
+                        {canSeeCost && usageCost != null && <> · ต้นทุน <strong style={{ color: '#60a5fa' }}>฿{usageCost.toLocaleString(undefined, { maximumFractionDigits: 4 })}/{sel.unit}</strong></>}
                         {sel.purchaseUnit && <span style={{ opacity: 0.7 }}> (1 {sel.purchaseUnit} = {factor.toLocaleString()} {sel.unit})</span>}
                       </div>
                     )}

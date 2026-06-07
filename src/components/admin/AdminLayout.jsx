@@ -3,8 +3,10 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, UtensilsCrossed, Tag, LogOut, Store, Layers, FileSpreadsheet, Globe, Users, Settings, Package, FlaskConical, BarChart2 } from 'lucide-react';
 import './Admin.css';
 
-const AdminLayout = ({ lang, setLang }) => {
+const AdminLayout = ({ lang, setLang, isCashier = false }) => {
   const navigate = useNavigate();
+  // แคชเชียร์เห็นเฉพาะหน้าเหล่านี้
+  const allowAll = !isCashier;
 
   return (
     <div className="admin-container">
@@ -23,33 +25,47 @@ const AdminLayout = ({ lang, setLang }) => {
              <NavLink to="/admin/categories" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
                 <Layers size={20} /> {lang === 'th' ? 'หมวดหมู่' : 'Categories'}
              </NavLink>
-             <NavLink to="/admin/users" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
-                <Users size={20} /> {lang === 'th' ? 'พนักงาน' : 'Users'}
-             </NavLink>
+             {allowAll && (
+               <NavLink to="/admin/users" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
+                  <Users size={20} /> {lang === 'th' ? 'พนักงาน' : 'Users'}
+               </NavLink>
+             )}
              <NavLink to="/admin/promotions" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
                 <Tag size={20} /> {lang === 'th' ? 'ส่วนลด' : 'Discounts'}
              </NavLink>
-             <NavLink to="/admin/printers" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
-                <Store size={20} /> {lang === 'th' ? 'ปริ้นเตอร์' : 'Printers'}
-             </NavLink>
-             <NavLink to="/admin/bom" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
-                <FlaskConical size={20} /> {lang === 'th' ? 'BOM / สูตรอาหาร' : 'BOM'}
-             </NavLink>
+             {allowAll && (
+               <NavLink to="/admin/printers" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
+                  <Store size={20} /> {lang === 'th' ? 'ปริ้นเตอร์' : 'Printers'}
+               </NavLink>
+             )}
+             {allowAll && (
+               <NavLink to="/admin/bom" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
+                  <FlaskConical size={20} /> {lang === 'th' ? 'BOM / สูตรอาหาร' : 'BOM'}
+               </NavLink>
+             )}
              <NavLink to="/admin/stock" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
                 <Package size={20} /> {lang === 'th' ? 'สต็อกวัตถุดิบ' : 'Stock'}
              </NavLink>
-             <NavLink to="/admin/settings" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
-                <Settings size={20} /> {lang === 'th' ? 'ตั้งค่าร้าน' : 'Settings'}
-             </NavLink>
-             <NavLink to="/admin/reports" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
-                <BarChart2 size={20} /> {lang === 'th' ? 'รายงาน' : 'Reports'}
-             </NavLink>
-             <a href="/kitchen" className="admin-link" onClick={(e) => { e.preventDefault(); navigate('/kitchen'); }}>
-                <Store size={20} /> {lang === 'th' ? 'หน้าจอห้องครัว' : 'Kitchen Monitor'}
-             </a>
-             <a href="https://docs.google.com/spreadsheets/" target="_blank" rel="noopener noreferrer" className="admin-link">
-                <FileSpreadsheet size={20} /> {lang === 'th' ? 'กูเกิลชีต (ข้อมูล)' : 'Google Sheets'}
-             </a>
+             {allowAll && (
+               <NavLink to="/admin/settings" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
+                  <Settings size={20} /> {lang === 'th' ? 'ตั้งค่าร้าน' : 'Settings'}
+               </NavLink>
+             )}
+             {allowAll && (
+               <NavLink to="/admin/reports" className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
+                  <BarChart2 size={20} /> {lang === 'th' ? 'รายงาน' : 'Reports'}
+               </NavLink>
+             )}
+             {allowAll && (
+               <a href="/kitchen" className="admin-link" onClick={(e) => { e.preventDefault(); navigate('/kitchen'); }}>
+                  <Store size={20} /> {lang === 'th' ? 'หน้าจอห้องครัว' : 'Kitchen Monitor'}
+               </a>
+             )}
+             {allowAll && (
+               <a href="https://docs.google.com/spreadsheets/" target="_blank" rel="noopener noreferrer" className="admin-link">
+                  <FileSpreadsheet size={20} /> {lang === 'th' ? 'กูเกิลชีต (ข้อมูล)' : 'Google Sheets'}
+               </a>
+             )}
              
              <button 
                className="admin-link" 
@@ -65,7 +81,7 @@ const AdminLayout = ({ lang, setLang }) => {
           </nav>
        </aside>
        <main className="admin-main">
-          <Outlet context={{ lang }} />
+          <Outlet context={{ lang, isCashier, canSeeCost: !isCashier }} />
        </main>
     </div>
   );

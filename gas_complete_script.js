@@ -24,7 +24,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Menu', ['id', 'category', 'name', 'nameEn', 'description', 'descriptionEn', 'price', 'image', 'isActive', 'bundledItems', 'popupConfig', 'prices', 'categories']);
   getOrCreateSheet(ss, 'Promotions', ['id', 'name', 'nameEn', 'price', 'origPrice']);
   getOrCreateSheet(ss, 'TableOrders', ['TableNumber', 'SessionId', 'ItemName', 'ItemNameEn', 'ItemPrice', 'Quantity', 'Options', 'Timestamp', 'Status', 'RecordedBy']);
-  getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout', 'isAdmin']);
+  getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout', 'isAdmin', 'isCashier']);
   getOrCreateSheet(ss, 'Discounts', ['id', 'name', 'type', 'value', 'categories']);
   getOrCreateSheet(ss, 'Settings', ['key', 'value']);
   getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
@@ -459,9 +459,9 @@ function doPost(e) {
   if (action === 'saveUsers') {
     var sheet = ss.getSheetByName('Users');
     sheet.clearContents();
-    sheet.appendRow(['id', 'username', 'pin', 'canCheckout', 'isAdmin']);
+    sheet.appendRow(['id', 'username', 'pin', 'canCheckout', 'isAdmin', 'isCashier']);
     (postData.users || []).forEach(function(u) {
-      sheet.appendRow([u.id||Date.now().toString(), u.username||'', u.pin||'', u.canCheckout!==false, (u.isAdmin===true || u.isAdmin==='TRUE')]);
+      sheet.appendRow([u.id||Date.now().toString(), u.username||'', u.pin||'', u.canCheckout!==false, (u.isAdmin===true || u.isAdmin==='TRUE'), (u.isCashier===true || u.isCashier==='TRUE')]);
     });
     return _bomJson({ success: true });
   }

@@ -48,6 +48,8 @@ function App() {
 
   // สิทธิ์แอดมิน: รองรับ flag isAdmin จากชีต และเผื่อ user ชื่อ admin
   const isAdmin = !!(currentUser && (currentUser.isAdmin === true || currentUser.isAdmin === 'TRUE' || String(currentUser.username || '').toLowerCase() === 'admin'));
+  // สิทธิ์แคชเชียร์: เข้าหลังบ้านได้บางหน้า (ไม่เห็นราคาต้นทุน)
+  const isCashier = !isAdmin && !!(currentUser && (currentUser.isCashier === true || currentUser.isCashier === 'TRUE'));
 
   // Shift state
   const [currentShift, setCurrentShift] = useState(() => {
@@ -802,13 +804,13 @@ function App() {
             >
               🍾 {lang === 'th' ? 'ฝาก/เบิกเหล้า' : 'Liquor Storage'}
             </button>
-            {/* Admin / backend button — admin only */}
-            {isAdmin && (
+            {/* Admin / backend button — admin & cashier */}
+            {(isAdmin || isCashier) && (
               <button
                 onClick={() => navigate('/admin')}
                 style={{ position: 'fixed', bottom: '1.5rem', left: '1.5rem', zIndex: 100, background: '#1f2937', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}
               >
-                👑 {lang === 'th' ? 'หลังบ้าน' : 'Admin'}
+                {isCashier ? '💳' : '👑'} {lang === 'th' ? 'หลังบ้าน' : 'Admin'}
               </button>
             )}
           </div>
@@ -984,17 +986,17 @@ function App() {
           <LiquorStorage currentUser={currentUser} lang={lang} onBack={() => navigate('/table-select')} />
         } />
 
-        <Route path="/admin" element={isAdmin ? <AdminLayout lang={lang} setLang={setLang} onLogout={handleLogout} /> : <Navigate to="/table-select" replace />}>
+        <Route path="/admin" element={(isAdmin || isCashier) ? <AdminLayout lang={lang} setLang={setLang} onLogout={handleLogout} isCashier={isCashier} /> : <Navigate to="/table-select" replace />}>
           <Route index element={<Dashboard />} />
           <Route path="menu" element={<ManageMenu />} />
           <Route path="categories" element={<ManageCategories />} />
-          <Route path="users" element={<ManageUsers />} />
+          <Route path="users" element={isAdmin ? <ManageUsers /> : <Navigate to="/admin" replace />} />
           <Route path="promotions" element={<ManagePromotions />} />
-          <Route path="printers" element={<ManagePrinters />} />
-          <Route path="settings" element={<ManageSettings />} />
-          <Route path="bom" element={<ManageBOM />} />
+          <Route path="printers" element={isAdmin ? <ManagePrinters /> : <Navigate to="/admin" replace />} />
+          <Route path="settings" element={isAdmin ? <ManageSettings /> : <Navigate to="/admin" replace />} />
+          <Route path="bom" element={isAdmin ? <ManageBOM /> : <Navigate to="/admin" replace />} />
           <Route path="stock" element={<ManageStock />} />
-          <Route path="reports" element={<Reports />} />
+          <Route path="reports" element={isAdmin ? <Reports /> : <Navigate to="/admin" replace />} />
         </Route>
       </Routes>
 

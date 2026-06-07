@@ -15,7 +15,15 @@ const inp = {
   outline: 'none', boxSizing: 'border-box',
 };
 
-const EMPTY_USER = { id: '', username: '', pin: '', canCheckout: true, isAdmin: false };
+const EMPTY_USER = { id: '', username: '', pin: '', canCheckout: true, isAdmin: false, isCashier: false };
+
+const isTrue = (v) => v === true || v === 'TRUE';
+const userRole = (u) => isTrue(u.isAdmin) ? 'admin' : (isTrue(u.isCashier) ? 'cashier' : 'staff');
+const ROLE_OPTIONS = [
+  { key: 'admin',   label: '👑 แอดมิน',     color: '#f97316', bg: 'rgba(249,115,22,0.18)', bd: 'rgba(249,115,22,0.6)' },
+  { key: 'cashier', label: '💳 แคชเชียร์',   color: '#38bdf8', bg: 'rgba(56,189,248,0.18)', bd: 'rgba(56,189,248,0.6)' },
+  { key: 'staff',   label: 'พนักงานทั่วไป', color: '#9ca3af', bg: 'rgba(255,255,255,0.06)', bd: 'rgba(255,255,255,0.2)' },
+];
 
 export default function ManageUsers() {
   const { lang } = useOutletContext();
@@ -42,6 +50,11 @@ export default function ManageUsers() {
 
   const handleChange = (id, field, value) => {
     setUsers(prev => prev.map(u => u.id === id ? { ...u, [field]: value } : u));
+    markDirty();
+  };
+
+  const setUserRole = (id, role) => {
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, isAdmin: role === 'admin', isCashier: role === 'cashier' } : u));
     markDirty();
   };
 
@@ -166,13 +179,16 @@ export default function ManageUsers() {
                       </div>
                     </div>
                     <div>
-                      <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 8 }}>สิทธิ์แอดมิน (เข้าหลังบ้าน)</label>
-                      <div style={{ display: 'flex', gap: '0.6rem' }}>
-                        {[true, false].map(val => (
-                          <button key={String(val)} onClick={() => handleChange(user.id, 'isAdmin', val)} style={{ flex: 1, padding: '0.55rem', borderRadius: 8, border: '1.5px solid', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', background: (user.isAdmin === true) === val ? (val ? 'rgba(249,115,22,0.18)' : 'rgba(255,255,255,0.04)') : 'rgba(255,255,255,0.04)', borderColor: (user.isAdmin === true) === val ? (val ? 'rgba(249,115,22,0.6)' : 'rgba(255,255,255,0.1)') : 'rgba(255,255,255,0.1)', color: (user.isAdmin === true) === val ? (val ? '#f97316' : 'rgba(255,255,255,0.4)') : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-                            {val ? '👑 เป็นแอดมิน' : 'พนักงานทั่วไป'}
-                          </button>
-                        ))}
+                      <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 8 }}>ระดับสิทธิ์ (เข้าหลังบ้าน)</label>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {ROLE_OPTIONS.map(r => {
+                          const active = userRole(user) === r.key;
+                          return (
+                            <button key={r.key} onClick={() => setUserRole(user.id, r.key)} style={{ flex: 1, padding: '0.55rem 0.3rem', borderRadius: 8, border: '1.5px solid', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.78rem', background: active ? r.bg : 'rgba(255,255,255,0.04)', borderColor: active ? r.bd : 'rgba(255,255,255,0.1)', color: active ? r.color : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                              {r.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                     <button onClick={() => setEditId(null)} style={{ marginTop: 4, padding: '0.65rem', background: '#ea580c', border: 'none', borderRadius: 10, color: 'white', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
@@ -204,9 +220,14 @@ export default function ManageUsers() {
                         <span style={{ padding: '0.15rem 0.55rem', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, background: user.canCheckout !== false ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)', color: user.canCheckout !== false ? '#22c55e' : '#ef4444', border: `1px solid ${user.canCheckout !== false ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`, display: 'flex', alignItems: 'center', gap: 3 }}>
                           {user.canCheckout !== false ? <><ShieldCheck size={10} /> ชำระเงินได้</> : <><ShieldOff size={10} /> ไม่มีสิทธิ์ชำระ</>}
                         </span>
-                        {user.isAdmin === true && (
+                        {userRole(user) === 'admin' && (
                           <span style={{ padding: '0.15rem 0.55rem', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, background: 'rgba(249,115,22,0.12)', color: '#f97316', border: '1px solid rgba(249,115,22,0.3)', display: 'flex', alignItems: 'center', gap: 3 }}>
                             👑 แอดมิน
+                          </span>
+                        )}
+                        {userRole(user) === 'cashier' && (
+                          <span style={{ padding: '0.15rem 0.55rem', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, background: 'rgba(56,189,248,0.12)', color: '#38bdf8', border: '1px solid rgba(56,189,248,0.3)', display: 'flex', alignItems: 'center', gap: 3 }}>
+                            💳 แคชเชียร์
                           </span>
                         )}
                       </div>
@@ -283,13 +304,16 @@ export default function ManageUsers() {
                 </div>
               </div>
               <div>
-                <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 8 }}>สิทธิ์แอดมิน (เข้าหลังบ้าน)</label>
-                <div style={{ display: 'flex', gap: '0.6rem' }}>
-                  {[true, false].map(val => (
-                    <button key={String(val)} onClick={() => setForm(f => ({ ...f, isAdmin: val }))} style={{ flex: 1, padding: '0.6rem', borderRadius: 8, border: '1.5px solid', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.85rem', background: (form.isAdmin === true) === val && val ? 'rgba(249,115,22,0.18)' : 'rgba(255,255,255,0.04)', borderColor: (form.isAdmin === true) === val && val ? 'rgba(249,115,22,0.6)' : 'rgba(255,255,255,0.1)', color: (form.isAdmin === true) === val && val ? '#f97316' : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
-                      {val ? '👑 เป็นแอดมิน' : 'พนักงานทั่วไป'}
-                    </button>
-                  ))}
+                <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 8 }}>ระดับสิทธิ์ (เข้าหลังบ้าน)</label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {ROLE_OPTIONS.map(r => {
+                    const active = userRole(form) === r.key;
+                    return (
+                      <button key={r.key} onClick={() => setForm(f => ({ ...f, isAdmin: r.key === 'admin', isCashier: r.key === 'cashier' }))} style={{ flex: 1, padding: '0.6rem 0.3rem', borderRadius: 8, border: '1.5px solid', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: '0.78rem', background: active ? r.bg : 'rgba(255,255,255,0.04)', borderColor: active ? r.bd : 'rgba(255,255,255,0.1)', color: active ? r.color : 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                        {r.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>
