@@ -17,6 +17,7 @@ import ManageSettings from './components/admin/ManageSettings';
 import ManageStock from './components/admin/ManageStock';
 import ManageBOM from './components/admin/ManageBOM';
 import TableSelection from './components/TableSelection';
+import PaymentApprovalListener from './components/PaymentApprovalListener';
 import TableOrderView from './components/TableOrderView';
 import LoginScreen from './components/LoginScreen';
 import LiquorStorage from './components/LiquorStorage';
@@ -1066,7 +1067,13 @@ function App() {
           discounts={posDiscounts}
           users={users}
           currentUser={currentUser}
+          tableNo={tableNumber}
         />
+      )}
+
+      {/* แจ้งเตือนคำขออนุมัติ QR — เฉพาะแอดมิน/แคชเชียร์ */}
+      {(isAdmin || isCashier) && (
+        <PaymentApprovalListener currentUser={currentUser} lang={lang} />
       )}
     </div>
   );

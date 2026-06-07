@@ -29,6 +29,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Settings', ['key', 'value']);
   getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
   getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'phone', 'productName', 'qty', 'note', 'staff', 'category', 'unit']);
+  getOrCreateSheet(ss, 'PaymentApprovals', ['id', 'timestamp', 'tableNo', 'orderNumber', 'amount', 'requestedBy', 'status', 'approver', 'respondedAt']);
   getOrCreateSheet(ss, 'Shifts', ['id', 'openTime', 'closeTime', 'openStaff', 'closeStaff', 'openCash', 'closeCash', 'totalSales', 'totalCash', 'totalCard', 'totalTransfer', 'totalOrders', 'status', 'note']);
   getOrCreateSheet(ss, 'PaymentSummary', ['timestamp', 'orderNumber', 'tableNo', 'paymentMethod', 'grandTotal', 'staff', 'shiftId', 'splitDetail']);
 }
@@ -86,6 +87,18 @@ function doGet(e) {
 
   // ── BOM actions ──
   if (action === 'getLiquorRecords') return _bomJson({ success: true, records: getSheetDataAsObjects(ss, 'LiquorStorage') });
+
+  // คำขออนุมัติ QR — คืนเฉพาะที่ยัง pending หรือเพิ่งตอบใน 10 นาทีล่าสุด
+  if (action === 'getPaymentApprovals') {
+    var all = getSheetDataAsObjects(ss, 'PaymentApprovals');
+    var cutoff = Date.now() - 10 * 60 * 1000;
+    var recent = all.filter(function(r) {
+      if (r.status === 'pending') return true;
+      var t = r.respondedAt ? new Date(r.respondedAt).getTime() : 0;
+      return t >= cutoff;
+    });
+    return _bomJson({ success: true, approvals: recent });
+  }
   if (action === 'getStock')         return _bomJson(getStockLevels());
   if (action === 'getIngredients')   return _bomJson(getIngredientsList());
   if (action === 'getShifts')        return _bomJson({ success: true, shifts: getSheetDataAsObjects(ss, 'Shifts') });
@@ -422,6 +435,29 @@ function doPost(e) {
     sh.getRange(1, 1, 1, liquorHeaders.length).setValues([liquorHeaders]);
     sh.appendRow([new Date().toISOString(), postData.type || 'ฝาก', postData.customerName || '', postData.phone || '', postData.productName || '', Number(postData.qty) || 0, postData.note || '', postData.staff || '', postData.category || 'เหล้า', postData.unit || 'ขวด']);
     return _bomJson({ success: true });
+  }
+
+  // สร้างคำขออนุมัติ QR (สถานะ pending)
+  if (action === 'createPaymentApproval') {
+    var sh = getOrCreateSheet(ss, 'PaymentApprovals', ['id', 'timestamp', 'tableNo', 'orderNumber', 'amount', 'requestedBy', 'status', 'approver', 'respondedAt']);
+    sh.appendRow([postData.id || ('APV-' + Date.now()), new Date().toISOString(), postData.tableNo || '', postData.orderNumber || '', Number(postData.amount) || 0, postData.requestedBy || '', 'pending', '', '']);
+    return _bomJson({ success: true });
+  }
+
+  // ตอบกลับคำขออนุมัติ QR (approved / rejected)
+  if (action === 'respondPaymentApproval') {
+    var sh2 = ss.getSheetByName('PaymentApprovals');
+    if (!sh2) return _bomJson({ success: false });
+    var data2 = sh2.getDataRange().getValues();
+    for (var i = 1; i < data2.length; i++) {
+      if (String(data2[i][0]) === String(postData.id)) {
+        sh2.getRange(i + 1, 7).setValue(postData.status || 'approved');
+        sh2.getRange(i + 1, 8).setValue(postData.approver || '');
+        sh2.getRange(i + 1, 9).setValue(new Date().toISOString());
+        return _bomJson({ success: true });
+      }
+    }
+    return _bomJson({ success: false, error: 'Not found' });
   }
 
   if (action === 'savePrinters') {

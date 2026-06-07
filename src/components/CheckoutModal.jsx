@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
-import { X, CheckCircle, ArrowLeft, CreditCard, Banknote, Smartphone, Tag, ChevronRight, Split } from 'lucide-react';
+import { X, CheckCircle, ArrowLeft, CreditCard, Banknote, Smartphone, Tag, ChevronRight, Split, Clock } from 'lucide-react';
 import { generatePromptPayPayload } from '../utils/promptpay';
+
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
 
 const calcCharges = (subtotal, settings = {}, discount = null) => {
   let discountAmount = 0;
@@ -22,7 +24,7 @@ const calcCharges = (subtotal, settings = {}, discount = null) => {
 };
 
 const CheckoutModal = ({
-  tableOrderItems = [], total = 0, orderNumber,
+  tableOrderItems = [], total = 0, orderNumber, tableNo = '',
   onClose, onComplete, lang = 'th',
   settings = {}, discounts = [], users = [], currentUser = null
 }) => {
@@ -30,26 +32,11 @@ const CheckoutModal = ({
   const [cashInput, setCashInput] = useState('');
   const [selectedDiscount, setSelectedDiscount] = useState(null);
 
-  // อนุมัติสร้าง QR โดยแอดมิน/แคชเชียร์
+  // อนุมัติสร้าง QR โดยแอดมิน/แคชเชียร์ (แจ้งเตือนข้ามเครื่อง → กดยืนยัน)
   const [qrApproved, setQrApproved] = useState(false);
   const [approverName, setApproverName] = useState('');
-  const [approvePin, setApprovePin] = useState('');
-  const [approveErr, setApproveErr] = useState('');
-
-  const isTrue = (v) => v === true || v === 'TRUE';
-  const canApprove = (u) => isTrue(u?.isAdmin) || isTrue(u?.isCashier) || String(u?.username || '').toLowerCase() === 'admin';
-
-  const submitApproval = () => {
-    const match = (users || []).find(u => String(u.pin) === String(approvePin).trim() && canApprove(u));
-    if (match) {
-      setQrApproved(true);
-      setApproverName(match.username || '');
-      setApprovePin('');
-      setApproveErr('');
-    } else {
-      setApproveErr(lang === 'th' ? 'PIN ไม่ถูกต้อง หรือไม่มีสิทธิ์อนุมัติ' : 'Invalid PIN or no approval permission');
-    }
-  };
+  const [approvalId, setApprovalId] = useState('');
+  const [approvalStatus, setApprovalStatus] = useState('idle'); // idle | pending | approved | rejected
 
   // แยกจ่าย (split payment)
   const [splitCash, setSplitCash] = useState('');
@@ -66,12 +53,56 @@ const CheckoutModal = ({
   // ── PromptPay QR ── (เลขพร้อมเพย์ ตั้งได้ที่ตั้งค่าร้าน ไม่งั้นใช้ค่าเริ่มต้น)
   const promptPayId = settings?.promptPayId || '3101600936940';
   const [qrDataUrl, setQrDataUrl] = useState('');
-  // รีเซ็ตการอนุมัติเมื่อออกจากขั้นเงินโอน (ต้องอนุมัติใหม่ทุกครั้ง)
+
+  // ส่งคำขออนุมัติไปยังแอดมิน/แคชเชียร์
+  const requestApproval = () => {
+    const id = `APV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    setApprovalId(id);
+    setApprovalStatus('pending');
+    setQrApproved(false);
+    setApproverName('');
+    fetch(GAS_URL, {
+      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'createPaymentApproval',
+        id, tableNo, orderNumber,
+        amount: grand,
+        requestedBy: currentUser?.username || 'ไม่ระบุ'
+      })
+    }).catch(() => {});
+  };
+
+  // เข้า/ออกขั้นเงินโอน: เข้า → ส่งคำขอใหม่, ออก → รีเซ็ต (ต้องอนุมัติใหม่ทุกครั้ง)
   useEffect(() => {
-    if (paymentStep !== 'transfer') {
-      setQrApproved(false); setApproverName(''); setApprovePin(''); setApproveErr('');
+    if (paymentStep === 'transfer') {
+      if (approvalStatus === 'idle') requestApproval();
+    } else {
+      setQrApproved(false); setApproverName(''); setApprovalId(''); setApprovalStatus('idle');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentStep]);
+
+  // โพลสถานะคำขออนุมัติ
+  useEffect(() => {
+    if (paymentStep !== 'transfer' || approvalStatus !== 'pending' || !approvalId) return;
+    let stop = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`${GAS_URL}?action=getPaymentApprovals`);
+        const data = await res.json();
+        if (stop || !data.success) return;
+        const mine = (data.approvals || []).find(a => String(a.id) === String(approvalId));
+        if (mine && mine.status === 'approved') {
+          setQrApproved(true); setApproverName(mine.approver || ''); setApprovalStatus('approved');
+        } else if (mine && mine.status === 'rejected') {
+          setApprovalStatus('rejected');
+        }
+      } catch (e) {}
+    };
+    poll();
+    const iv = setInterval(poll, 3000);
+    return () => { stop = true; clearInterval(iv); };
+  }, [paymentStep, approvalStatus, approvalId]);
   useEffect(() => {
     // สร้าง QR เฉพาะเมื่อได้รับอนุมัติจากแอดมิน/แคชเชียร์แล้วเท่านั้น
     if (paymentStep !== 'transfer' || grand <= 0 || !qrApproved) { setQrDataUrl(''); return; }
@@ -571,47 +602,46 @@ const CheckoutModal = ({
               <button className="close-btn" onClick={() => setPaymentStep('payment_method')}><ArrowLeft size={22} /></button>
             </div>
             {!qrApproved ? (
-              /* ── ต้องให้แอดมิน/แคชเชียร์อนุมัติก่อนสร้าง QR ── */
+              /* ── ส่งคำขอให้แอดมิน/แคชเชียร์อนุมัติ (ข้ามเครื่อง) ── */
               <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
-                <div style={{ fontSize: '2.75rem', marginBottom: '0.5rem' }}>🔒</div>
+                <div style={{ fontSize: '2.75rem', marginBottom: '0.5rem' }}>
+                  {approvalStatus === 'rejected' ? '❌' : '⏳'}
+                </div>
                 <h3 style={{ fontSize: '1.1rem', marginBottom: '0.35rem', color: 'white' }}>
-                  {lang === 'th' ? 'ต้องได้รับการอนุมัติ' : 'Approval Required'}
+                  {approvalStatus === 'rejected'
+                    ? (lang === 'th' ? 'คำขอถูกปฏิเสธ' : 'Request Rejected')
+                    : (lang === 'th' ? 'รอการอนุมัติ' : 'Waiting for Approval')}
                 </h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 auto 1.1rem', maxWidth: '320px' }}>
-                  {lang === 'th'
-                    ? 'การชำระด้วย QR ต้องให้ผู้มีสิทธิ์ (แอดมิน/แคชเชียร์) ใส่ PIN ยืนยันก่อน จึงจะสร้าง QR ได้'
-                    : 'QR payment must be approved by an admin/cashier PIN before the QR is generated'}
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0 auto 1.1rem', maxWidth: '330px' }}>
+                  {approvalStatus === 'rejected'
+                    ? (lang === 'th' ? 'ผู้มีสิทธิ์ปฏิเสธคำขอนี้ กดเพื่อขออนุมัติใหม่อีกครั้ง' : 'The request was rejected. Tap to request approval again.')
+                    : (lang === 'th' ? 'ได้ส่งแจ้งเตือนไปยังแอดมิน/แคชเชียร์แล้ว กรุณารอการกดยืนยัน ระบบจะสร้าง QR ให้อัตโนมัติ' : 'Notified admin/cashier. Waiting for confirmation — the QR will appear automatically.')}
                 </p>
 
-                <div style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', padding: '1rem', maxWidth: '320px', margin: '0 auto 1rem' }}>
+                <div style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', padding: '1rem', maxWidth: '320px', margin: '0 auto 1.1rem' }}>
                   <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '0.25rem' }}>{lang === 'th' ? 'ยอดที่ต้องชำระ' : 'Amount Due'}</div>
                   <div style={{ color: '#fbbf24', fontWeight: 900, fontSize: '1.8rem' }}>฿{grand.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '0.35rem' }}>
+                    {lang === 'th' ? 'บิล' : 'Bill'} {orderNumber}{tableNo ? ` · ${lang === 'th' ? 'โต๊ะ' : 'Table'} ${tableNo}` : ''}
+                  </div>
                 </div>
 
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={4}
-                  value={approvePin}
-                  onChange={e => { setApprovePin(e.target.value.replace(/\D/g, '')); setApproveErr(''); }}
-                  onKeyDown={e => { if (e.key === 'Enter') submitApproval(); }}
-                  placeholder={lang === 'th' ? 'PIN ผู้มีสิทธิ์ (4 หลัก)' : 'Approver PIN (4 digits)'}
-                  autoFocus
-                  style={{ width: '100%', maxWidth: '320px', padding: '0.85rem', background: 'rgba(0,0,0,0.3)', border: '2px solid rgba(96,165,250,0.4)', borderRadius: '12px', color: 'white', fontSize: '1.5rem', fontWeight: 700, textAlign: 'center', letterSpacing: '0.5rem', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box', margin: '0 auto', display: 'block' }}
-                />
-                {approveErr && (
-                  <p style={{ color: '#ef4444', fontSize: '0.85rem', marginTop: '0.6rem' }}>{approveErr}</p>
+                {approvalStatus === 'pending' && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', color: '#60a5fa', fontSize: '0.9rem', fontWeight: 600 }}>
+                    <Clock size={18} style={{ animation: 'spin 1.5s linear infinite' }} />
+                    {lang === 'th' ? 'กำลังรอผู้มีสิทธิ์กดยืนยัน...' : 'Waiting for approval...'}
+                  </div>
                 )}
 
-                <button
-                  onClick={submitApproval}
-                  disabled={approvePin.length !== 4}
-                  className="confirm-btn"
-                  style={{ width: '100%', marginTop: '1rem', background: approvePin.length === 4 ? '#60a5fa' : 'rgba(255,255,255,0.1)', cursor: approvePin.length === 4 ? 'pointer' : 'not-allowed', opacity: approvePin.length === 4 ? 1 : 0.5 }}
-                >
-                  <CheckCircle size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
-                  {lang === 'th' ? 'อนุมัติและสร้าง QR' : 'Approve & Generate QR'}
-                </button>
+                {approvalStatus === 'rejected' && (
+                  <button
+                    onClick={requestApproval}
+                    className="confirm-btn"
+                    style={{ width: '100%', background: '#60a5fa' }}
+                  >
+                    {lang === 'th' ? 'ขออนุมัติใหม่' : 'Request Again'}
+                  </button>
+                )}
               </div>
             ) : (
             <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
