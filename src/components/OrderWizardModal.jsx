@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, ArrowRight, ArrowLeft, Check } from 'lucide-react';
-import { resolvePopupSource, getPriceOptions } from '../utils/popupConfig';
+import { resolvePopupSource } from '../utils/popupConfig';
 
 const DINING_OPTIONS = [
   { id: 'dine_in', name: 'ทานที่ร้าน', nameEn: 'Dine-in' },
   { id: 'takeaway', name: 'ห่อกลับบ้าน', nameEn: 'Takeaway' }
 ];
 
-const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = [], categories = [] }) => {
+const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = [], categories = [], basePrice = 0 }) => {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [selectedPopup1, setSelectedPopup1] = useState({});
   const [selectedPopup2, setSelectedPopup2] = useState({});
@@ -17,15 +17,8 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
   const [selectedPopup6, setSelectedPopup6] = useState({});
   const [selectedDining, setSelectedDining] = useState(DINING_OPTIONS[0]);
 
-  // ราคา (หลายประเภท) → ใช้เป็น "ประเภทลูกค้า"
-  const priceOptions = getPriceOptions(food);
+  // ราคาฐานถูกกำหนดจาก "ประเภทลูกค้า" ที่เลือกไว้ด้านบนหน้าเมนูแล้ว
   const isDrink = !!food && food.category === 'drink';
-  const [selectedPrice, setSelectedPrice] = useState(priceOptions[0]);
-  const [customerName, setCustomerName] = useState('');
-
-  const selectedPriceIdx = Math.max(0, priceOptions.findIndex(o =>
-    o === selectedPrice || (selectedPrice && o.name === selectedPrice.name && o.price === selectedPrice.price)
-  ));
 
   // ดึงค่า popup จากตัวเมนูเอง (ถ้าตั้งไว้) ไม่งั้น fallback ไปที่หมวดหมู่
   const categoryConfig = food ? resolvePopupSource(food, categories) : {};
@@ -92,7 +85,6 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
   };
 
   const validSteps = [
-    priceOptions.length > 1 ? 'price' : null,
     categoryConfig.hasPopup1 === true ? 1 : null,
     categoryConfig.hasPopup2 === true ? 2 : null,
     categoryConfig.hasPopup3 === true ? 3 : null,
@@ -145,7 +137,7 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
   ];
 
   const currentTotal = () => {
-    let total = Number(selectedPrice?.price) || 0;
+    let total = Number(basePrice) || 0;
     getExpandedPopups().forEach(a => { total += Number(a.price) || 0; });
     return total;
   };
@@ -153,9 +145,7 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
   const handleSubmit = () => {
     onConfirm(food, {
       allPopups: getExpandedPopups(),
-      dining: isDrink ? { id: 'drink', name: 'เครื่องดื่ม', nameEn: 'Drinks' } : selectedDining,
-      selectedPrice,
-      customerName: customerName.trim()
+      dining: isDrink ? { id: 'drink', name: 'เครื่องดื่ม', nameEn: 'Drinks' } : selectedDining
     });
   };
 
@@ -265,53 +255,6 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
         </div>
 
         <div className="wizard-body">
-          {step === 'price' && (
-            <div className="wizard-step">
-              <h3 className="step-title">{lang === 'th' ? 'เลือกประเภทลูกค้า' : 'Select Customer Type'}</h3>
-              <p className="step-desc">{lang === 'th' ? 'เลือกประเภทลูกค้าเพื่อกำหนดราคา' : 'Choose customer type to set the price'}</p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem', maxWidth: '440px' }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600 }}>
-                    {lang === 'th' ? 'ประเภทลูกค้า' : 'Customer Type'}
-                  </span>
-                  <select
-                    value={selectedPriceIdx}
-                    onChange={(e) => setSelectedPrice(priceOptions[Number(e.target.value)])}
-                    style={{
-                      width: '100%', padding: '0.85rem 1rem', borderRadius: '10px',
-                      background: 'rgba(255,255,255,0.06)', color: 'white',
-                      border: '1px solid rgba(255,255,255,0.18)', fontSize: '1rem',
-                      fontWeight: 600, cursor: 'pointer', appearance: 'auto'
-                    }}
-                  >
-                    {priceOptions.map((opt, idx) => (
-                      <option key={idx} value={idx} style={{ color: '#000' }}>
-                        {(opt.name || (lang === 'th' ? 'ปกติ' : 'Normal'))} — ฿{Number(opt.price).toLocaleString()}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 600 }}>
-                    {lang === 'th' ? 'ชื่อลูกค้า' : 'Customer Name'}
-                  </span>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder={lang === 'th' ? 'ใส่ชื่อลูกค้า (ถ้ามี)' : 'Enter customer name (optional)'}
-                    style={{
-                      width: '100%', padding: '0.85rem 1rem', borderRadius: '10px',
-                      background: 'rgba(255,255,255,0.06)', color: 'white',
-                      border: '1px solid rgba(255,255,255,0.18)', fontSize: '1rem'
-                    }}
-                  />
-                </label>
-              </div>
-            </div>
-          )}
           {step === 1 && renderPopupStep(pop1Config, selectedPopup1, setSelectedPopup1)}
           {step === 2 && renderPopupStep(pop2Config, selectedPopup2, setSelectedPopup2)}
           {step === 3 && renderPopupStep(pop3Config, selectedPopup3, setSelectedPopup3)}

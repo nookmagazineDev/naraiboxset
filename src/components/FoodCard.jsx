@@ -1,7 +1,7 @@
 import React from 'react';
 import { Plus, Minus } from 'lucide-react';
 
-const FoodCard = ({ food, onOrderClick, onDecreaseClick, cartQuantity = 0, lang = 'th' }) => {
+const FoodCard = ({ food, onOrderClick, onDecreaseClick, cartQuantity = 0, lang = 'th', displayPrice }) => {
   const [imgType, setImgType] = React.useState('png'); // 'png' | 'svg' | 'placeholder'
   const name = lang === 'th' ? food.name : (food.nameEn || food.name);
   const desc = lang === 'th' ? food.description : (food.descriptionEn || food.description);
@@ -75,10 +75,7 @@ const FoodCard = ({ food, onOrderClick, onDecreaseClick, cartQuantity = 0, lang 
 
         <div className="pos-card-footer">
           <span className="pos-card-price">
-            ฿{Number(food.price).toLocaleString()}
-            {Array.isArray(food.prices) && food.prices.length > 1 && (
-              <span style={{ fontSize: '0.7rem', fontWeight: 600, opacity: 0.7 }}> {lang === 'th' ? 'ขึ้นไป' : '+'}</span>
-            )}
+            ฿{Number(displayPrice != null ? displayPrice : food.price).toLocaleString()}
           </span>
 
           {cartQuantity > 0 ? (

@@ -33,6 +33,8 @@ function App() {
   const location = useLocation();
   const [activeCategory, setActiveCategory] = useState('food');
   const [lang, setLang] = useState('th');
+  // ประเภทลูกค้าที่เลือกอยู่ (กำหนดราคาของทุกเมนู) — '' = ราคาปกติ
+  const [customerType, setCustomerType] = useState('');
   // ทุกครั้งที่เปิด/รีเฟรชแอป ให้เริ่มที่หน้าเลือกโต๊ะเสมอ (ไม่จำเลขโต๊ะเดิม)
   const [tableNumber, setTableNumber] = useState('');
 
@@ -280,47 +282,51 @@ function App() {
   const [cart, setCart] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
 
+  // รายการ "ประเภทลูกค้า" ทั้งหมด (รวมจากชื่อราคาของทุกเมนู) — '' = ราคาปกติ
+  const customerTypeOptions = (() => {
+    const names = new Set();
+    (liveMenu || []).forEach(m => {
+      getPriceOptions(m).forEach(o => { if (o.name && o.name.trim()) names.add(o.name.trim()); });
+    });
+    names.delete('ปกติ'); // ปกติ = ค่าเริ่มต้น แทนด้วย ''
+    return ['', ...Array.from(names)];
+  })();
+
+  // ราคาตาม "ประเภทลูกค้า" ที่เลือก — ถ้าเมนูไม่มีประเภทนั้น ใช้ราคาปกติแทน
+  const resolvePrice = (food) => {
+    const opts = getPriceOptions(food);
+    if (customerType) {
+      const match = opts.find(o => (o.name || '').trim() === customerType);
+      if (match) return match;
+    }
+    return opts.find(o => (o.name || '').trim() === 'ปกติ') || opts[0];
+  };
+
   const handleOrderClick = (food) => {
     if (!currentShift) {
       alert(lang === 'th' ? 'กรุณาเปิดกะก่อนจึงจะสั่งอาหารได้' : 'Please open a shift before ordering.');
       return;
     }
-    const multiPrice = getPriceOptions(food).length > 1;
-    if (food.category === 'drink') {
-      // เครื่องดื่ม: ถ้ามีหลายราคา ให้เลือกราคาก่อน ไม่งั้นเพิ่มลงตะกร้าทันที
-      if (multiPrice) {
-        setSelectedFood(food);
-      } else {
-        setCart([...cart, {
-          cartId: Date.now() + Math.random(),
-          food,
-          quantity: 1,
-          allPopups: [],
-          spice: { name: '', nameEn: '' },
-          promo: { id: 'none', name: '', nameEn: '', price: 0 },
-          dining: { name: 'เครื่องดื่ม', nameEn: 'Drinks' }
-        }]);
-        setIsCartOpen(true);
-      }
+    // ราคาถูกกำหนดจาก "ประเภทลูกค้า" ด้านบนแล้ว → ไม่ต้องเลือกราคาใน popup อีก
+    const cats = allCategories.length > 0 ? allCategories : categories;
+    const cfg = resolvePopupSource(food, cats);
+    const hasPopups = [1, 2, 3, 4, 5, 6].some(i => cfg[`hasPopup${i}`] === true);
+    if (hasPopups) {
+      setSelectedFood(food);
     } else {
-      // ถ้ารายการนี้ไม่ได้เซต popup และมีราคาเดียว → เพิ่มลงตะกร้าทันทีโดยไม่ต้องเด้ง wizard
-      const cats = allCategories.length > 0 ? allCategories : categories;
-      const cfg = resolvePopupSource(food, cats);
-      const hasPopups = [1, 2, 3, 4, 5, 6].some(i => cfg[`hasPopup${i}`] === true);
-      if (!hasPopups && !multiPrice) {
-        handleConfirmOrder(food, {
-          allPopups: [],
-          dining: { id: 'dine_in', name: 'ทานที่ร้าน', nameEn: 'Dine-in' }
-        });
-      } else {
-        setSelectedFood(food);
-      }
+      // ไม่มี popup → เพิ่มลงตะกร้าทันที
+      handleConfirmOrder(food, {
+        allPopups: [],
+        dining: food.category === 'drink'
+          ? { id: 'drink', name: 'เครื่องดื่ม', nameEn: 'Drinks' }
+          : { id: 'dine_in', name: 'ทานที่ร้าน', nameEn: 'Dine-in' }
+      });
     }
   };
 
   const handleConfirmOrder = (rawFood, orderDetails) => {
-    // ใช้ราคาที่ลูกค้าเลือก (ถ้ามีหลายราคา) แทนราคาเริ่มต้น
-    const chosen = orderDetails.selectedPrice;
+    // ราคาฐานมาจาก "ประเภทลูกค้า" ที่เลือกไว้ (fallback = ราคาปกติ)
+    const chosen = resolvePrice(rawFood);
     const baseFood = chosen
       ? { ...rawFood, price: Number(chosen.price) || 0, priceName: chosen.name || '' }
       : rawFood;
@@ -802,6 +808,27 @@ function App() {
                   </div>
                 </div>
                 <div className="pos-header-right">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginRight: '0.5rem' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>
+                      👤 {lang === 'th' ? 'ประเภทลูกค้า' : 'Customer'}
+                    </span>
+                    <select
+                      value={customerType}
+                      onChange={(e) => setCustomerType(e.target.value)}
+                      style={{
+                        padding: '0.5rem 0.75rem', borderRadius: '8px',
+                        background: 'rgba(255,255,255,0.08)', color: 'white',
+                        border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.9rem',
+                        fontWeight: 700, cursor: 'pointer', maxWidth: '160px'
+                      }}
+                    >
+                      {customerTypeOptions.map(t => (
+                        <option key={t || 'normal'} value={t} style={{ color: '#000' }}>
+                          {t || (lang === 'th' ? 'ปกติ' : 'Normal')}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <button className="pos-header-btn" onClick={() => { setTableNumber(''); navigate('/table-select'); }}>
                     🪑 {lang === 'th' ? 'เลือกโต๊ะ' : 'Tables'}
                   </button>
@@ -868,6 +895,7 @@ function App() {
                               key={item.id}
                               food={item}
                               lang={lang}
+                              displayPrice={Number(resolvePrice(item)?.price) || 0}
                               onOrderClick={handleOrderClick}
                               onDecreaseClick={handleDecreaseQuantity}
                               cartQuantity={cart.filter(c => c.food.id === item.id).reduce((sum, c) => sum + (c.quantity || 1), 0)}
@@ -919,6 +947,7 @@ function App() {
           lang={lang}
           liveMenu={allMenu.length > 0 ? allMenu : liveMenu}
           categories={allCategories.length > 0 ? allCategories : categories}
+          basePrice={Number(resolvePrice(selectedFood)?.price) || 0}
           onClose={() => setSelectedFood(null)}
           onConfirm={handleConfirmOrder}
         />
