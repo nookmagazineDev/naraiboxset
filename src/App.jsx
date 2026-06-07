@@ -35,6 +35,8 @@ function App() {
   const [lang, setLang] = useState('th');
   // ประเภทลูกค้าที่เลือกอยู่ (กำหนดราคาของทุกเมนู) — '' = ราคาปกติ
   const [customerType, setCustomerType] = useState('');
+  // ชื่อลูกค้า (ไม่บังคับกรอก)
+  const [customerName, setCustomerName] = useState('');
   // ทุกครั้งที่เปิด/รีเฟรชแอป ให้เริ่มที่หน้าเลือกโต๊ะเสมอ (ไม่จำเลขโต๊ะเดิม)
   const [tableNumber, setTableNumber] = useState('');
 
@@ -339,10 +341,10 @@ function App() {
         }
       });
     }
-    const customerName = (orderDetails.customerName || '').trim();
+    const orderCustomerName = customerName.trim();
     const allPopupsWithBundled = [...(orderDetails.allPopups || []), ...bundledPopups];
     const popupsIds = allPopupsWithBundled.map(p => p.id).sort().join('-') || 'no_popups';
-    const cartItemId = `${baseFood.id}_${baseFood.priceName || ''}_${customerName}_${popupsIds}_${orderDetails.spice?.id}_${orderDetails.promo?.id}_${orderDetails.dining?.id}`;
+    const cartItemId = `${baseFood.id}_${baseFood.priceName || ''}_${orderCustomerName}_${popupsIds}_${orderDetails.spice?.id}_${orderDetails.promo?.id}_${orderDetails.dining?.id}`;
     const existingItemIndex = cart.findIndex(item => item.cartItemId === cartItemId);
     let newCart;
     if (existingItemIndex >= 0) {
@@ -354,7 +356,7 @@ function App() {
         cartItemId,
         food: baseFood,
         quantity: 1,
-        customerName,
+        customerName: orderCustomerName,
         allPopups: allPopupsWithBundled,
         spice: orderDetails.spice,
         promo: orderDetails.promo,
@@ -828,6 +830,18 @@ function App() {
                         </option>
                       ))}
                     </select>
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder={lang === 'th' ? 'ชื่อลูกค้า (ถ้ามี)' : 'Customer name (optional)'}
+                      style={{
+                        padding: '0.5rem 0.75rem', borderRadius: '8px',
+                        background: 'rgba(255,255,255,0.08)', color: 'white',
+                        border: '1px solid rgba(255,255,255,0.2)', fontSize: '0.9rem',
+                        width: '150px'
+                      }}
+                    />
                   </div>
                   <button className="pos-header-btn" onClick={() => { setTableNumber(''); navigate('/table-select'); }}>
                     🪑 {lang === 'th' ? 'เลือกโต๊ะ' : 'Tables'}
