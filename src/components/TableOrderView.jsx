@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Plus, CreditCard, Trash2, ChevronLeft, RefreshCw } from 'lucide-react';
+import { ShoppingBag, Plus, CreditCard, Trash2, ChevronLeft, RefreshCw, Split, AlertTriangle } from 'lucide-react';
 
 const calcCharges = (subtotal, settings = {}) => {
   const scRate = settings?.serviceCharge?.enabled ? (settings.serviceCharge.rate || 0) : 0;
@@ -25,8 +25,10 @@ const TableOrderView = ({
   settings = {}
 }) => {
   const [showActionModal, setShowActionModal] = useState(false);
-  const [actionType, setActionType] = useState(''); // 'move' or 'merge'
+  const [actionType, setActionType] = useState(''); // 'move' | 'merge' | 'split'
   const [targetTable, setTargetTable] = useState('');
+  const [confirmStage, setConfirmStage] = useState(false); // true = ขั้นยืนยันอีกรอบ
+  const [selectedIdx, setSelectedIdx] = useState([]); // index ของรายการที่เลือก
   
   const [showEditCustomerModal, setShowEditCustomerModal] = useState(false);
   const [currentCount, setCurrentCount] = useState(() => localStorage.getItem('customer_count_' + tableNumber) || '');
@@ -40,6 +42,43 @@ const TableOrderView = ({
   const totalAmount = pendingItems.reduce((sum, item) => {
     return sum + (Number(item.ItemPrice) || 0) * (Number(item.Quantity) || 1);
   }, 0);
+
+  const toggleSelect = (idx) => {
+    setSelectedIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]);
+  };
+  const allSelected = pendingItems.length > 0 && selectedIdx.length === pendingItems.length;
+  const toggleSelectAll = () => {
+    setSelectedIdx(allSelected ? [] : pendingItems.map((_, i) => i));
+  };
+
+  // เปิด modal สำหรับแอคชั่นโต๊ะ (move/merge/split)
+  const openAction = (type) => {
+    setActionType(type);
+    setTargetTable('');
+    setConfirmStage(false);
+    setShowActionModal(true);
+  };
+  const closeAction = () => {
+    setShowActionModal(false);
+    setConfirmStage(false);
+  };
+
+  // รายการที่จะดำเนินการ: ถ้าไม่ได้เลือกอะไร = ทั้งโต๊ะ
+  const actingItems = selectedIdx.length > 0 ? selectedIdx.map(i => pendingItems[i]).filter(Boolean) : pendingItems;
+  const actingIsAll = selectedIdx.length === 0 || selectedIdx.length === pendingItems.length;
+
+  const actionLabel = (type) => {
+    if (type === 'move') return lang === 'th' ? 'ย้ายโต๊ะ' : 'Move';
+    if (type === 'merge') return lang === 'th' ? 'รวมโต๊ะ' : 'Merge';
+    return lang === 'th' ? 'แยกโต๊ะ' : 'Split';
+  };
+
+  const runTableAction = () => {
+    if (!targetTable || targetTable === String(tableNumber)) return;
+    onMoveMerge(tableNumber, targetTable, actionType === 'merge', actingItems, actingIsAll);
+    closeAction();
+    setSelectedIdx([]);
+  };
 
   return (
     <div style={{
@@ -103,7 +142,8 @@ const TableOrderView = ({
             </h2>
             <div style={{ display: 'flex', gap: '4px' }}>
               <button
-                onClick={() => { setActionType('move'); setTargetTable(''); setShowActionModal(true); }}
+                onClick={() => openAction('move')}
+                disabled={pendingItems.length === 0}
                 style={{
                   background: 'rgba(59,130,246,0.2)',
                   border: '1px solid rgba(59,130,246,0.3)',
@@ -112,13 +152,15 @@ const TableOrderView = ({
                   padding: '2px 8px',
                   fontSize: '0.75rem',
                   fontWeight: '600',
-                  cursor: 'pointer'
+                  cursor: pendingItems.length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: pendingItems.length === 0 ? 0.4 : 1
                 }}
               >
                 {lang === 'th' ? 'ย้ายโต๊ะ' : 'Move'}
               </button>
               <button
-                onClick={() => { setActionType('merge'); setTargetTable(''); setShowActionModal(true); }}
+                onClick={() => openAction('merge')}
+                disabled={pendingItems.length === 0}
                 style={{
                   background: 'rgba(16,185,129,0.2)',
                   border: '1px solid rgba(16,185,129,0.3)',
@@ -127,10 +169,29 @@ const TableOrderView = ({
                   padding: '2px 8px',
                   fontSize: '0.75rem',
                   fontWeight: '600',
-                  cursor: 'pointer'
+                  cursor: pendingItems.length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: pendingItems.length === 0 ? 0.4 : 1
                 }}
               >
                 {lang === 'th' ? 'รวมโต๊ะ' : 'Merge'}
+              </button>
+              <button
+                onClick={() => openAction('split')}
+                disabled={pendingItems.length === 0}
+                style={{
+                  background: 'rgba(168,85,247,0.2)',
+                  border: '1px solid rgba(168,85,247,0.3)',
+                  borderRadius: '6px',
+                  color: '#c084fc',
+                  padding: '2px 8px',
+                  fontSize: '0.75rem',
+                  fontWeight: '600',
+                  cursor: pendingItems.length === 0 ? 'not-allowed' : 'pointer',
+                  opacity: pendingItems.length === 0 ? 0.4 : 1,
+                  display: 'flex', alignItems: 'center', gap: '3px'
+                }}
+              >
+                <Split size={12} /> {lang === 'th' ? 'แยกโต๊ะ' : 'Split'}
               </button>
             </div>
           </div>
@@ -180,18 +241,37 @@ const TableOrderView = ({
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: '0.6rem',
+              padding: '0.5rem 0.25rem', cursor: 'pointer',
+              color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 600
+            }}>
+              <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
+              {lang === 'th' ? 'เลือกทั้งหมด' : 'Select all'}
+              {selectedIdx.length > 0 && (
+                <span style={{ color: 'var(--accent)' }}>
+                  ({selectedIdx.length} {lang === 'th' ? 'รายการ' : 'selected'})
+                </span>
+              )}
+            </label>
             {pendingItems.map((item, idx) => {
               const subtotal = (Number(item.ItemPrice) || 0) * (Number(item.Quantity) || 1);
               return (
                 <div key={idx} style={{
                   background: 'var(--bg-card)',
-                  border: '1px solid rgba(255,255,255,0.07)',
+                  border: `1px solid ${selectedIdx.includes(idx) ? 'rgba(249,115,22,0.5)' : 'rgba(255,255,255,0.07)'}`,
                   borderRadius: '14px',
                   padding: '1rem 1.1rem',
                   display: 'flex',
                   alignItems: 'flex-start',
                   gap: '0.75rem'
                 }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIdx.includes(idx)}
+                    onChange={() => toggleSelect(idx)}
+                    style={{ width: '18px', height: '18px', marginTop: '0.35rem', cursor: 'pointer', flexShrink: 0 }}
+                  />
                   <div style={{
                     background: 'rgba(249,115,22,0.12)',
                     border: '1px solid rgba(249,115,22,0.3)',
@@ -399,76 +479,118 @@ const TableOrderView = ({
             boxShadow: '0 10px 40px rgba(0,0,0,0.5)'
           }}>
             <h3 style={{ margin: '0 0 1rem 0', color: 'white', textAlign: 'center' }}>
-              {actionType === 'move' 
-                ? (lang === 'th' ? 'ย้ายโต๊ะ' : 'Move Table')
-                : (lang === 'th' ? 'รวมโต๊ะ' : 'Merge Table')}
+              {actionLabel(actionType)}
             </h3>
-            
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                {actionType === 'move' 
-                  ? (lang === 'th' ? 'ย้ายไปโต๊ะเบอร์ (โต๊ะว่าง):' : 'Move to table (empty):')
-                  : (lang === 'th' ? 'รวมกับโต๊ะเบอร์ (โต๊ะที่มีลูกค้า):' : 'Merge into table (occupied):')}
-              </label>
-              <input
-                type="text"
-                value={targetTable}
-                onChange={(e) => setTargetTable(e.target.value)}
-                placeholder={lang === 'th' ? 'ระบุเบอร์โต๊ะเป้าหมาย' : 'Enter target table'}
-                style={{
-                  width: '100%',
-                  background: 'rgba(0,0,0,0.3)',
-                  border: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: '10px',
-                  color: 'white',
-                  padding: '0.8rem',
-                  fontSize: '1rem',
-                  outline: 'none',
-                  boxSizing: 'border-box'
-                }}
-                autoFocus
-              />
+
+            {/* สรุปรายการที่จะดำเนินการ */}
+            <div style={{
+              marginBottom: '1rem', padding: '0.6rem 0.8rem', borderRadius: '10px',
+              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+              fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center'
+            }}>
+              {actingIsAll
+                ? (lang === 'th' ? `ดำเนินการกับ "ทั้งโต๊ะ" (${actingItems.length} รายการ)` : `Acting on the whole table (${actingItems.length} items)`)
+                : (lang === 'th' ? `ดำเนินการกับ ${actingItems.length} รายการที่เลือก` : `Acting on ${actingItems.length} selected items`)}
             </div>
 
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button
-                onClick={() => setShowActionModal(false)}
-                style={{
-                  flex: 1,
-                  background: 'rgba(255,255,255,0.1)',
-                  border: 'none',
-                  borderRadius: '10px',
-                  color: 'white',
-                  padding: '0.8rem',
-                  fontWeight: '600',
-                  cursor: 'pointer'
-                }}
-              >
-                {lang === 'th' ? 'ยกเลิก' : 'Cancel'}
-              </button>
-              <button
-                onClick={() => {
-                  if (targetTable && targetTable !== String(tableNumber)) {
-                    onMoveMerge(tableNumber, targetTable, actionType === 'merge');
-                    setShowActionModal(false);
-                  }
-                }}
-                disabled={!targetTable || targetTable === String(tableNumber)}
-                style={{
-                  flex: 1,
-                  background: actionType === 'move' ? '#3b82f6' : '#10b981',
-                  border: 'none',
-                  borderRadius: '10px',
-                  color: 'white',
-                  padding: '0.8rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  opacity: (!targetTable || targetTable === String(tableNumber)) ? 0.5 : 1
-                }}
-              >
-                {lang === 'th' ? 'ยืนยัน' : 'Confirm'}
-              </button>
-            </div>
+            {!confirmStage ? (
+              <>
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                    {actionType === 'move'
+                      ? (lang === 'th' ? 'ย้ายไปโต๊ะเบอร์ (โต๊ะว่าง):' : 'Move to table (empty):')
+                      : actionType === 'merge'
+                        ? (lang === 'th' ? 'รวมกับโต๊ะเบอร์ (โต๊ะที่มีลูกค้า):' : 'Merge into table (occupied):')
+                        : (lang === 'th' ? 'แยกรายการไปโต๊ะเบอร์:' : 'Split items to table:')}
+                  </label>
+                  <input
+                    type="text"
+                    value={targetTable}
+                    onChange={(e) => setTargetTable(e.target.value)}
+                    placeholder={lang === 'th' ? 'ระบุเบอร์โต๊ะเป้าหมาย' : 'Enter target table'}
+                    style={{
+                      width: '100%',
+                      background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.2)',
+                      borderRadius: '10px',
+                      color: 'white',
+                      padding: '0.8rem',
+                      fontSize: '1rem',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                    autoFocus
+                  />
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button
+                    onClick={closeAction}
+                    style={{
+                      flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none',
+                      borderRadius: '10px', color: 'white', padding: '0.8rem',
+                      fontWeight: '600', cursor: 'pointer'
+                    }}
+                  >
+                    {lang === 'th' ? 'ยกเลิก' : 'Cancel'}
+                  </button>
+                  <button
+                    onClick={() => { if (targetTable && targetTable !== String(tableNumber)) setConfirmStage(true); }}
+                    disabled={!targetTable || targetTable === String(tableNumber)}
+                    style={{
+                      flex: 1,
+                      background: actionType === 'move' ? '#3b82f6' : actionType === 'merge' ? '#10b981' : '#a855f7',
+                      border: 'none', borderRadius: '10px', color: 'white', padding: '0.8rem',
+                      fontWeight: '600', cursor: 'pointer',
+                      opacity: (!targetTable || targetTable === String(tableNumber)) ? 0.5 : 1
+                    }}
+                  >
+                    {lang === 'th' ? 'ถัดไป' : 'Next'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  gap: '0.75rem', marginBottom: '1.5rem', textAlign: 'center'
+                }}>
+                  <AlertTriangle size={40} color="#fbbf24" />
+                  <p style={{ margin: 0, color: 'white', fontSize: '1rem', fontWeight: 600 }}>
+                    {lang === 'th' ? 'ยืนยันอีกครั้ง' : 'Please confirm again'}
+                  </p>
+                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                    {lang === 'th'
+                      ? `${actionLabel(actionType)} ${actingIsAll ? 'ทั้งโต๊ะ' : `${actingItems.length} รายการ`} จากโต๊ะ ${tableNumber} ไปโต๊ะ ${targetTable} ?`
+                      : `${actionLabel(actionType)} ${actingIsAll ? 'the whole table' : `${actingItems.length} items`} from table ${tableNumber} to table ${targetTable}?`}
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button
+                    onClick={() => setConfirmStage(false)}
+                    style={{
+                      flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none',
+                      borderRadius: '10px', color: 'white', padding: '0.8rem',
+                      fontWeight: '600', cursor: 'pointer'
+                    }}
+                  >
+                    {lang === 'th' ? 'ย้อนกลับ' : 'Back'}
+                  </button>
+                  <button
+                    onClick={runTableAction}
+                    style={{
+                      flex: 1,
+                      background: actionType === 'move' ? '#3b82f6' : actionType === 'merge' ? '#10b981' : '#a855f7',
+                      border: 'none', borderRadius: '10px', color: 'white', padding: '0.8rem',
+                      fontWeight: '700', cursor: 'pointer'
+                    }}
+                  >
+                    {lang === 'th' ? 'ยืนยัน' : 'Confirm'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

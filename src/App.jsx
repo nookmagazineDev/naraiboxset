@@ -634,40 +634,62 @@ function App() {
   // =============================================
   // NEW: Move or Merge Table
   // =============================================
-  const handleMoveMergeTable = async (fromTable, toTable, isMerge) => {
+  // ลายเซ็นของแต่ละบรรทัดในตาราง ใช้จับคู่ตอนย้าย/แยกบางรายการ
+  const tableRowSig = (o) => `${o.SessionId}|${o.ItemName}|${o.Options || ''}|${o.ItemPrice}`;
+
+  // items = บรรทัดที่เลือก (ถ้า isAll = true จะย้ายทั้งโต๊ะ)
+  const handleMoveMergeTable = async (fromTable, toTable, isMerge, items = null, isAll = true) => {
+    const moveAll = isAll || !items || items.length === 0;
+
+    // นับจำนวนต่อ signature สำหรับการย้ายบางรายการ
+    const need = {};
+    if (!moveAll) items.forEach(it => { const s = tableRowSig(it); need[s] = (need[s] || 0) + 1; });
+
     // Optimistic update
     setTableOrders(prev => prev.map(o => {
-      if (String(o.TableNumber) === String(fromTable)) {
-        return { ...o, TableNumber: toTable };
-      }
+      if (String(o.TableNumber) !== String(fromTable) || o.Status === 'paid') return o;
+      if (moveAll) return { ...o, TableNumber: toTable };
+      const s = tableRowSig(o);
+      if (need[s] > 0) { need[s] -= 1; return { ...o, TableNumber: toTable }; }
       return o;
     }));
 
-    // Move customer count
-    const count = localStorage.getItem('customer_count_' + fromTable);
-    if (count) {
-      if (isMerge) {
-        const toCount = localStorage.getItem('customer_count_' + toTable);
-        if (!toCount) localStorage.setItem('customer_count_' + toTable, count);
-      } else {
-        localStorage.setItem('customer_count_' + toTable, count);
+    // ย้ายจำนวนลูกค้าเฉพาะเมื่อย้ายทั้งโต๊ะ
+    if (moveAll) {
+      const count = localStorage.getItem('customer_count_' + fromTable);
+      if (count) {
+        if (isMerge) {
+          const toCount = localStorage.getItem('customer_count_' + toTable);
+          if (!toCount) localStorage.setItem('customer_count_' + toTable, count);
+        } else {
+          localStorage.setItem('customer_count_' + toTable, count);
+        }
+        localStorage.removeItem('customer_count_' + fromTable);
       }
-      localStorage.removeItem('customer_count_' + fromTable);
     }
 
     setTableNumber(toTable);
     navigate('/table-orders');
 
     try {
+      const body = moveAll
+        ? { action: 'moveTable', fromTable: String(fromTable), toTable: String(toTable) }
+        : {
+            action: 'moveTableItems',
+            fromTable: String(fromTable),
+            toTable: String(toTable),
+            keys: items.map(it => ({
+              sessionId: String(it.SessionId ?? ''),
+              itemName: String(it.ItemName ?? ''),
+              options: String(it.Options ?? ''),
+              price: Number(it.ItemPrice) || 0
+            }))
+          };
       await fetch(GAS_URL, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          action: 'moveTable',
-          fromTable: String(fromTable),
-          toTable: String(toTable)
-        })
+        body: JSON.stringify(body)
       });
       setTimeout(() => fetchOrdersFromSheet(), 2000);
     } catch (e) {

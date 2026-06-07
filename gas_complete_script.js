@@ -226,6 +226,32 @@ function doPost(e) {
     return _bomJson({ success: updated });
   }
 
+  // ย้าย/แยกเฉพาะบางรายการไปอีกโต๊ะ (จับคู่ด้วย sessionId+itemName+options+price ตามจำนวนที่เลือก)
+  if (action === 'moveTableItems') {
+    var sheet = ss.getSheetByName('TableOrders');
+    var fromTable = String(postData.fromTable || '');
+    var toTable   = String(postData.toTable   || '');
+    var keys = postData.keys || [];
+    var need = {};
+    keys.forEach(function(k) {
+      var sig = String(k.sessionId || '') + '|' + String(k.itemName || '') + '|' + String(k.options || '') + '|' + String(Number(k.price) || 0);
+      need[sig] = (need[sig] || 0) + 1;
+    });
+    var data = sheet.getDataRange().getValues();
+    var updated = false;
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]) === fromTable && data[i][8] !== 'paid') {
+        var sig2 = String(data[i][1]) + '|' + String(data[i][2]) + '|' + String(data[i][6]) + '|' + String(Number(data[i][4]) || 0);
+        if (need[sig2] > 0) {
+          sheet.getRange(i + 1, 1).setValue(toTable);
+          need[sig2] -= 1;
+          updated = true;
+        }
+      }
+    }
+    return _bomJson({ success: updated });
+  }
+
   // ── ORDER ACTIONS ──
   if (action === 'insertOrder') {
     var sheet = ss.getSheetByName('Orders');
