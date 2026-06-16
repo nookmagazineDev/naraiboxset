@@ -10,6 +10,7 @@ import PaymentApprovalListener from './components/PaymentApprovalListener';
 import TableOrderView from './components/TableOrderView';
 import LoginScreen from './components/LoginScreen';
 import ShiftModal from './components/ShiftModal';
+import SalesSummaryModal from './components/SalesSummaryModal';
 // โหลดแบบ lazy: หน้าหลังบ้าน/ครัว/เหล้า/บิลค้าง ไม่ต้องโหลดตอนเปิดหน้าร้าน → เริ่มแอปไวขึ้น
 const KitchenMonitor = lazy(() => import('./components/KitchenMonitor'));
 const AdminLayout = lazy(() => import('./components/admin/AdminLayout'));
@@ -204,6 +205,7 @@ function App() {
   const [checkoutItems, setCheckoutItems] = useState([]);
   const [checkoutTotal, setCheckoutTotal] = useState(0);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [showSalesSummaryModal, setShowSalesSummaryModal] = useState(false);
 
   // เก็บ JSON ของแต่ละส่วนที่ apply ไปแล้ว → อัปเดต state เฉพาะส่วนที่เปลี่ยนจริง (กัน re-render ทั้งแอปทุก 10 วิ)
   const appliedRef = React.useRef({});
@@ -941,6 +943,9 @@ function App() {
                   <button className="pos-header-btn" onClick={() => navigate('/table-orders')}>
                     🧾 {lang === 'th' ? 'สรุปบิล' : 'Bill Summary'}
                   </button>
+                  <button className="pos-header-btn" onClick={() => setShowSalesSummaryModal(true)} style={{ background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc' }}>
+                    📊 {lang === 'th' ? 'สรุปยอดขาย' : 'Sales Summary'}
+                  </button>
                   <button
                     onClick={refreshTableOrders}
                     disabled={isRefreshing}
@@ -1102,6 +1107,13 @@ function App() {
           onConfirmOpen={handleOpenShift}
           onConfirmClose={handleCloseShift}
           onClose={() => setShiftModalMode(null)}
+        />
+      )}
+
+      {showSalesSummaryModal && (
+        <SalesSummaryModal
+          lang={lang}
+          onClose={() => setShowSalesSummaryModal(false)}
         />
       )}
 
