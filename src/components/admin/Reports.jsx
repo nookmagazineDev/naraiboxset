@@ -4,6 +4,7 @@ import { BarChart2, TrendingUp, Receipt, XCircle, Clock, RefreshCw, Download } f
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3XyaHUni23zgFET3q7ATSpBTzftfNX7ILvbEYbG134KAl/exec';
 
 const TABS = [
+  { key: 'daily',   label: 'สรุปประจำวัน',       icon: <TrendingUp size={15} /> },
   { key: 'income',  label: 'รายรับ-รายจ่าย',   icon: <TrendingUp size={15} /> },
   { key: 'menu',    label: 'ยอดขายตามเมนู',      icon: <BarChart2  size={15} /> },
   { key: 'history', label: 'ประวัติการขาย',       icon: <Receipt   size={15} /> },
@@ -68,12 +69,16 @@ const th_    = { padding: '0.65rem 0.9rem', textAlign: 'left', color: 'rgba(255,
 const td_    = { padding: '0.65rem 0.9rem', fontSize: '0.875rem', borderBottom: '1px solid rgba(255,255,255,0.04)' };
 
 export default function Reports() {
-  const [tab,     setTab]     = useState('income');
-  const [from,    setFrom]    = useState(D7);
+  const [tab,     setTab]     = useState('daily');
+  const [from,    setFrom]    = useState(TODAY);
   const [to,      setTo]      = useState(TODAY);
   const [loading, setLoading] = useState(false);
   const [data,    setData]    = useState(null);
   const [error,   setError]   = useState('');
+
+  React.useEffect(() => {
+    load(from, to);
+  }, [load, from, to]);
 
   const load = useCallback(async (f, t) => {
     setLoading(true); setError('');
@@ -143,11 +148,19 @@ export default function Reports() {
   const menuMap = {};
   (data?.orders || []).forEach(r => {
     if (!r.ItemDetail || String(r.ItemDetail).startsWith('↳') || r.Status === 'cancelled') return;
-    const key = String(r.ItemDetail).replace(/\s*\(x\d+\)$/, '').trim();
-    if (!menuMap[key]) menuMap[key] = { name: key, qty: 0, revenue: 0 };
-    menuMap[key].qty++; menuMap[key].revenue += Number(r.Price) || 0;
+    const detail = String(r.ItemDetail).trim();
+    let qty = 1;
+    let name = detail;
+    const match = detail.match(/(.*?)\s*\(x(\d+)\)$/);
+    if (match) {
+      name = match[1].trim();
+      qty = parseInt(match[2], 10) || 1;
+    }
+    if (!menuMap[name]) menuMap[name] = { name: name, qty: 0, revenue: 0 };
+    menuMap[name].qty += qty;
+    menuMap[name].revenue += Number(r.Price) || 0;
   });
-  const menuRows = Object.values(menuMap).sort((a, b) => b.revenue - a.revenue);
+  const menuRows = Object.values(menuMap).sort((a, b) => b.qty - a.qty);
 
   // ─── Export handlers ─────────────────────────────────────
   const exportIncome = () => {
@@ -185,7 +198,7 @@ export default function Reports() {
     ], `รายงานทั้งหมด_${from}_${to}`);
   };
 
-  const TAB_EXPORT = { income: exportIncome, menu: exportMenu, history: exportHistory, cancel: exportCancel, shift: exportShift };
+  const TAB_EXPORT = { daily: exportAll, income: exportIncome, menu: exportMenu, history: exportHistory, cancel: exportCancel, shift: exportShift };
 
   return (
     <div style={{ color: 'white', fontFamily: 'inherit' }}>
@@ -251,6 +264,61 @@ export default function Reports() {
               <Download size={14} /> Export แท็บนี้ (.csv)
             </button>
           </div>
+
+          {/* ── Tab: สรุปยอดขายประจำวัน ── */}
+          {tab === 'daily' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {/* ยอดขายและจำนวนบิล */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={{ ...card, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '120px' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.85rem', marginBottom: '0.4rem', fontWeight: 600 }}>💰 ยอดขายทั้งหมด</span>
+                  <span style={{ color: '#fbbf24', fontWeight: 900, fontSize: '2rem' }}>฿{fmt(totalSales)}</span>
+                </div>
+                <div style={{ ...card, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '120px' }}>
+                  <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.85rem', marginBottom: '0.4rem', fontWeight: 600 }}>🧾 จำนวนบิลทั้งหมด</span>
+                  <span style={{ color: 'white', fontWeight: 900, fontSize: '2rem' }}>{totalBills} บิล</span>
+                </div>
+              </div>
+
+              {/* แยกตามประเภทการชำระเงิน */}
+              <div style={card}>
+                <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', color: 'white', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.5rem' }}>
+                  💳 แยกตามช่องทางการชำระเงิน
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.75rem' }}>
+                  {[
+                    { label: '💵 เงินสด', value: `฿${fmt(totalCash)}`, color: '#22c55e' },
+                    { label: '📱 เงินโอน / QR', value: `฿${fmt(totalXfer)}`, color: '#38bdf8' },
+                    { label: '💳 บัตรเครดิต', value: `฿${fmt(totalCard)}`, color: '#f97316' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: '0.75rem 1rem' }}>
+                      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: '0.78rem', marginBottom: 4 }}>{label}</div>
+                      <div style={{ color, fontWeight: 700, fontSize: '1.1rem' }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ยอดขายแยกรายเมนู (ไม่รวมแอดออน/ป๊อปอัพ) */}
+              <div style={card}>
+                <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', color: 'white', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '0.5rem' }}>
+                  🍲 ยอดขายแยกรายเมนู (ไม่รวมแอดออน/ป๊อปอัพ)
+                </h3>
+                <TableWrap empty={menuRows.length === 0} headers={['อันดับ','ชื่อเมนู','จำนวนที่ขายได้','ยอดรวมยอดขาย']}>
+                  {menuRows.map((r, i) => (
+                    <tr key={i}>
+                      <Td center color={i < 3 ? '#f97316' : undefined} bold={i < 3}>
+                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
+                      </Td>
+                      <Td bold>{r.name}</Td>
+                      <Td center bold style={{ fontSize: '1.05rem', color: 'var(--accent)' }}>{r.qty} จาน</Td>
+                      <Td bold color="#a78bfa">฿{fmt(r.revenue)}</Td>
+                    </tr>
+                  ))}
+                </TableWrap>
+              </div>
+            </div>
+          )}
 
           {/* ── Tab: รายรับ-รายจ่าย ── */}
           {tab === 'income' && (
