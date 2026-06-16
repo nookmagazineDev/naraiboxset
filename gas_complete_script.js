@@ -108,6 +108,10 @@ function doGet(e) {
     return _bomJson({ success: true, message: 'Sales and transaction data cleared successfully' });
   }
 
+  if (action === 'getSalesReport') {
+    return _bomJson(generateSalesReport());
+  }
+
   // ── BOM actions ──
   if (action === 'getLiquorRecords') return _bomJson({ success: true, records: getSheetDataAsObjects(ss, 'LiquorStorage') });
 
@@ -945,4 +949,119 @@ function clearSalesAndTransactionsData() {
   });
   
   Logger.log("ล้างข้อมูลการขาย ธุรกรรม และประวัติสต็อกทั้งหมดเรียบร้อยแล้ว คงเหลือไว้เฉพาะเมนูและหมวดอาหาร!");
+}
+
+// ฟังก์ชันสรุปยอดขายทั้งหมด (ยอดขายรวม, แยกประเภทชำระเงิน, จำนวนบิล, และจำนวนขายแต่ละเมนูที่ไม่รวมแอดออน/ป๊อปอัพ)
+function generateSalesReport() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  
+  // 1. คำนวณข้อมูลการเงินและประเภทชำระจากชีท PaymentSummary
+  var payments = getSheetDataAsObjects(ss, 'PaymentSummary');
+  var totalSales = 0;
+  var totalBills = 0;
+  var paymentBreakdown = {
+    'เงินสด': 0,
+    'เงินโอน / QR': 0,
+    'บัตรเครดิต': 0
+  };
+  var uniqueBills = {};
+  
+  payments.forEach(function(p) {
+    var billNo = p.orderNumber;
+    if (!billNo) return;
+    
+    if (!uniqueBills[billNo]) {
+      uniqueBills[billNo] = true;
+      totalBills++;
+    }
+    
+    var grandTotal = Number(p.grandTotal) || 0;
+    totalSales += grandTotal;
+    
+    var method = String(p.paymentMethod || '');
+    if (method.indexOf('แยกจ่าย') !== -1 || p.splitDetail) {
+      var split = null;
+      try {
+        split = typeof p.splitDetail === 'string' ? JSON.parse(p.splitDetail) : p.splitDetail;
+      } catch(e) {}
+      if (split) {
+        paymentBreakdown['เงินสด'] += Number(split.cash || 0);
+        paymentBreakdown['เงินโอน / QR'] += Number(split.transfer || 0);
+        paymentBreakdown['บัตรเครดิต'] += Number(split.card || 0);
+      }
+    } else {
+      if (method.indexOf('สด') !== -1 || method.toLowerCase() === 'cash') {
+        paymentBreakdown['เงินสด'] += grandTotal;
+      } else if (method.indexOf('โอน') !== -1 || method.indexOf('QR') !== -1 || method.toLowerCase() === 'transfer') {
+        paymentBreakdown['เงินโอน / QR'] += grandTotal;
+      } else if (method.indexOf('บัตร') !== -1 || method.toLowerCase() === 'card') {
+        paymentBreakdown['บัตรเครดิต'] += grandTotal;
+      } else {
+        paymentBreakdown['เงินสด'] += grandTotal; // default fallback
+      }
+    }
+  });
+  
+  // 2. คำนวณหาจำนวนเมนูที่ขายไปได้ โดยไม่นับแอดออน/ป๊อปอัพ จากชีท Orders
+  var orders = getSheetDataAsObjects(ss, 'Orders');
+  var menuSales = {};
+  
+  orders.forEach(function(o) {
+    var status = String(o.Status || '').toLowerCase();
+    if (status === 'cancelled') return;
+    
+    var detail = String(o.ItemDetail || '').trim();
+    if (!detail) return;
+    
+    // ข้ามแอดออน/ป๊อปอัพ (ขึ้นต้นด้วย ↳ หรือเป็นตัวเลือกอื่น)
+    if (detail.indexOf('↳') === 0 || detail.indexOf('ความเผ็ด') === 0 || detail.indexOf('ลูกค้า:') === 0) {
+      return;
+    }
+    
+    var qty = 1;
+    var name = detail;
+    var match = detail.match(/(.*?)\s*\(x(\d+)\)$/);
+    if (match) {
+      name = match[1].trim();
+      qty = parseInt(match[2], 10) || 1;
+    }
+    
+    if (!menuSales[name]) {
+      menuSales[name] = { qty: 0, revenue: 0 };
+    }
+    menuSales[name].qty += qty;
+    menuSales[name].revenue += (Number(o.Price) || 0);
+  });
+  
+  // 3. แสดงผลลง Logger
+  Logger.log("==================================================");
+  Logger.log("📊 รายงานสรุปยอดขายทั้งหมด (Sales Summary Report)");
+  Logger.log("==================================================");
+  Logger.log("💰 ยอดขายทั้งหมด: ฿" + totalSales.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+  Logger.log("🧾 จำนวนบิลทั้งหมด: " + totalBills + " บิล");
+  Logger.log("--------------------------------------------------");
+  Logger.log("💳 แยกตามช่องทางการชำระเงิน:");
+  Logger.log("💵 เงินสด: ฿" + paymentBreakdown['เงินสด'].toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+  Logger.log("📱 เงินโอน / QR: ฿" + paymentBreakdown['เงินโอน / QR'].toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+  Logger.log("💳 บัตรเครดิต: ฿" + paymentBreakdown['บัตรเครดิต'].toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+  Logger.log("--------------------------------------------------");
+  Logger.log("🍲 ยอดขายแยกรายเมนู (ไม่รวมแอดออน/ป๊อปอัพ):");
+  
+  var sortedMenus = Object.keys(menuSales).sort(function(a, b) {
+    return menuSales[b].qty - menuSales[a].qty;
+  });
+  
+  sortedMenus.forEach(function(mname) {
+    var data = menuSales[mname];
+    Logger.log(" - " + mname + ": ขายได้ " + data.qty + " จาน (ยอดขายรวม: ฿" + data.revenue.toLocaleString() + ")");
+  });
+  Logger.log("==================================================");
+  
+  return {
+    success: true,
+    totalSales: totalSales,
+    totalBills: totalBills,
+    paymentBreakdown: paymentBreakdown,
+    menuSales: menuSales
+  };
 }
