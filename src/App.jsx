@@ -499,17 +499,43 @@ function App() {
       }
       if (item.promo && item.promo.id !== 'none' && item.promo.name) parts.push(item.promo.name);
       if (item.note && item.note.trim()) parts.push('📝 ' + item.note.trim());
+
+      let unitPrice = Number(item.food.price) || 0;
+      if (item.allPopups && item.allPopups.length > 0) {
+        item.allPopups.forEach(p => { unitPrice += Number(p.price || 0); });
+      }
+      if (item.promo && item.promo.price) {
+        unitPrice += Number(item.promo.price) || 0;
+      }
+
       return {
         TableNumber: tableNumber,
         SessionId: sessionId,
         ItemName: item.food.name,
         ItemNameEn: item.food.nameEn || item.food.name,
-        ItemPrice: Number(item.food.price) || 0,
+        ItemPrice: unitPrice,
         Quantity: Number(item.quantity) || 1,
         Options: parts.join(', '),
         Timestamp: timestamp,
         Status: 'pending',
         RecordedBy: currentUser ? currentUser.username : ''
+      };
+    });
+
+    const cartForServer = cart.map(item => {
+      let unitPrice = Number(item.food.price) || 0;
+      if (item.allPopups && item.allPopups.length > 0) {
+        item.allPopups.forEach(p => { unitPrice += Number(p.price || 0); });
+      }
+      if (item.promo && item.promo.price) {
+        unitPrice += Number(item.promo.price) || 0;
+      }
+      return {
+        ...item,
+        food: {
+          ...item.food,
+          price: unitPrice
+        }
       };
     });
 
@@ -527,7 +553,7 @@ function App() {
           action: 'addTableOrder',
           tableNumber: String(tableNumber),
           sessionId,
-          items: cart,
+          items: cartForServer,
           timestamp,
           recordedBy: currentUser ? currentUser.username : ''
         })

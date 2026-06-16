@@ -321,7 +321,7 @@ const CheckoutModal = ({
               className="confirm-btn"
               style={{ width: '100%' }}
             >
-              {lang === 'th' ? `ดำเนินการชำระเงิน` : `Proceed to Payment`}
+              {lang === 'th' ? `ดำเนินการชำระเงิน ฿${grand.toLocaleString()}` : `Proceed to Payment ฿${grand.toLocaleString()}`}
               <ChevronRight size={18} style={{ display: 'inline', verticalAlign: 'middle', marginLeft: '6px' }} />
             </button>
           </>

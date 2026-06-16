@@ -48,6 +48,8 @@ const TableOrderView = ({
     return sum + (Number(item.ItemPrice) || 0) * (Number(item.Quantity) || 1);
   }, 0);
 
+  const { sc, vat, grand } = calcCharges(totalAmount, settings);
+
   const toggleSelect = (idx) => {
     setSelectedIdx(prev => prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]);
   };
@@ -394,7 +396,6 @@ const TableOrderView = ({
         gap: '0.75rem'
       }}>
         {pendingItems.length > 0 && (() => {
-          const { sc, vat, grand } = calcCharges(totalAmount, settings);
           const hasCharges = sc > 0 || vat > 0;
           return (
             <div style={{
@@ -491,7 +492,7 @@ const TableOrderView = ({
               }}
             >
               <CreditCard size={20} />
-              {lang === 'th' ? 'ชำระเงิน' : 'Pay Now'}
+              {lang === 'th' ? `ชำระเงิน ฿${grand.toLocaleString()}` : `Pay ฿${grand.toLocaleString()}`}
             </button>
           )}
         </div>
