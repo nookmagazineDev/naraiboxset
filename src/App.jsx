@@ -40,14 +40,14 @@ function App() {
   const [customerType, setCustomerType] = useState('');
   // ชื่อลูกค้า (ไม่บังคับกรอก)
   const [customerName, setCustomerName] = useState('');
-  // ทุกครั้งที่เปิด/รีเฟรชแอป ให้เริ่มที่หน้าเลือกโต๊ะเสมอ (ไม่จำเลขโต๊ะเดิม)
-  const [tableNumber, setTableNumber] = useState('');
+  // เริ่มต้นเลขโต๊ะที่โต๊ะ 1 เสมอ (ไม่ต้องเลือกโต๊ะ)
+  const [tableNumber, setTableNumber] = useState('1');
 
   // Users & Auth — seed from cache so login shows immediately without waiting for GAS
   const [users, setUsers] = useState(() => {
     try { return JSON.parse(localStorage.getItem('cached_users') || '[]'); } catch { return []; }
   });
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState({ id: 'admin', username: 'Admin', canCheckout: true, isAdmin: true });
 
   // สิทธิ์แอดมิน: รองรับ flag isAdmin จากชีต และเผื่อ user ชื่อ admin
   const isAdmin = !!(currentUser && (currentUser.isAdmin === true || currentUser.isAdmin === 'TRUE' || String(currentUser.username || '').toLowerCase() === 'admin'));
@@ -140,30 +140,25 @@ function App() {
 
   const handleLogin = (user) => {
     setCurrentUser(user);
-    // เข้าสู่ระบบใหม่ → กลับไปหน้าเลือกโต๊ะเสมอ
-    setTableNumber('');
-    navigate('/table-select', { replace: true });
+    // เข้าสู่ระบบใหม่ → ไปที่หน้าสั่งอาหารทันที
+    setTableNumber('1');
+    navigate('/index', { replace: true });
   };
 
   const handleLogout = () => {
-    setCurrentUser(null);
-    setTableNumber('');
-    navigate('/table-select', { replace: true });
+    setCurrentUser({ id: 'admin', username: 'Admin', canCheckout: true, isAdmin: true });
+    setTableNumber('1');
+    navigate('/index', { replace: true });
   };
 
-  // เปิด/รีเฟรชแอป → บังคับกลับหน้าเลือกโต๊ะ (รันครั้งเดียวตอน mount)
-  React.useEffect(() => {
-    setTableNumber('');
-    navigate('/table-select', { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
 
   React.useEffect(() => {
     if (tableNumber) localStorage.setItem('table_number', tableNumber);
     else localStorage.removeItem('table_number');
   }, [tableNumber]);
 
-  const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3XyaHUni23zgFET3q7ATSpBTzftfNX7ILvbEYbG134KAl/exec';
 
   const [orders, setOrders] = useState([]);
   const [maxOrderNum, setMaxOrderNum] = useState(0);
@@ -381,10 +376,6 @@ function App() {
   };
 
   const handleOrderClick = (food) => {
-    if (!currentShift) {
-      alert(lang === 'th' ? 'กรุณาเปิดกะก่อนจึงจะสั่งอาหารได้' : 'Please open a shift before ordering.');
-      return;
-    }
     // ราคาถูกกำหนดจาก "ประเภทลูกค้า" ด้านบนแล้ว → ไม่ต้องเลือกราคาใน popup อีก
     const cats = allCategories.length > 0 ? allCategories : categories;
     const cfg = resolvePopupSource(food, cats);
@@ -632,8 +623,8 @@ function App() {
     setCheckoutItems([]);
     setIsCheckoutOpen(false);
     localStorage.removeItem('customer_count_' + tableNumber);
-    setTableNumber('');
-    navigate('/table-select');
+    setTableNumber('1');
+    navigate('/index');
 
     try {
       // Save to Orders sheet
@@ -848,62 +839,10 @@ function App() {
     <div className="app-container">
       <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>{lang === 'th' ? 'กำลังโหลด...' : 'Loading...'}</div>}>
       <Routes>
-        <Route path="/" element={<Navigate to="/table-select" replace />} />
-
-        <Route path="/table-select" element={
-          <div style={{ position: 'relative' }}>
-            <TableSelection
-              setGlobalTableNumber={setTableNumber}
-              lang={lang}
-              tableOrders={tableOrders}
-              shiftOpen={!!currentShift}
-            />
-            {/* Refresh button — โหลดข้อมูลโต๊ะล่าสุด */}
-            <button
-              onClick={refreshTableOrders}
-              disabled={isRefreshing}
-              style={{ position: 'fixed', top: '1.5rem', right: '1.5rem', zIndex: 100, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: '50px', color: 'white', cursor: isRefreshing ? 'wait' : 'pointer', padding: '0.7rem 1.2rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.4)', opacity: isRefreshing ? 0.7 : 1 }}
-            >
-              <RefreshCw size={16} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
-              {isRefreshing ? (lang === 'th' ? 'กำลังโหลด...' : 'Loading...') : (lang === 'th' ? 'รีเฟรช' : 'Refresh')}
-            </button>
-            {/* Shift button — admin & cashier only */}
-            {(isAdmin || isCashier) && (
-              <button
-                onClick={() => setShiftModalMode(currentShift ? 'close' : 'open')}
-                style={{ position: 'fixed', bottom: '5.5rem', right: '1.5rem', zIndex: 100, background: currentShift ? 'rgba(239,68,68,0.85)' : 'rgba(34,197,94,0.85)', border: 'none', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: `0 4px 20px ${currentShift ? 'rgba(239,68,68,0.35)' : 'rgba(34,197,94,0.35)'}` }}
-              >
-                {currentShift ? '🔴 ปิดกะ' : '🟢 เปิดกะ'}
-              </button>
-            )}
-            {/* Liquor storage button */}
-            <button
-              onClick={() => navigate('/liquor')}
-              style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', zIndex: 100, background: '#7c3aed', border: 'none', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(124,58,237,0.4)' }}
-            >
-              🍾 {lang === 'th' ? 'ฝาก/เบิกเหล้า' : 'Liquor Storage'}
-            </button>
-            {/* Outstanding bills button */}
-            <button
-              onClick={() => navigate('/outstanding')}
-              style={{ position: 'fixed', bottom: '9.5rem', right: '1.5rem', zIndex: 100, background: '#b45309', border: 'none', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(180,83,9,0.4)' }}
-            >
-              🧾 {lang === 'th' ? 'รายการบิลค้าง' : 'Outstanding Bills'}
-            </button>
-            {/* Admin / backend button — admin & cashier */}
-            {(isAdmin || isCashier) && (
-              <button
-                onClick={() => navigate('/admin')}
-                style={{ position: 'fixed', bottom: '1.5rem', left: '1.5rem', zIndex: 100, background: '#1f2937', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '50px', color: 'white', cursor: 'pointer', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}
-              >
-                {isCashier ? '💳' : '👑'} {lang === 'th' ? 'หลังบ้าน' : 'Admin'}
-              </button>
-            )}
-          </div>
-        } />
+        <Route path="/" element={<Navigate to="/index" replace />} />
 
         <Route path="/table-orders" element={
-          !tableNumber ? <Navigate to="/table-select" replace /> :
+          !tableNumber ? <Navigate to="/index" replace /> :
             <TableOrderView
               tableNumber={tableNumber}
               tableOrders={tableOrders}
@@ -914,8 +853,7 @@ function App() {
               onCheckout={handleOpenCheckoutFromTable}
               onDeleteItem={handleDeleteTableItem}
               onBack={() => {
-                setTableNumber('');
-                navigate('/table-select');
+                navigate('/index');
               }}
               onRefresh={refreshTableOrders}
               isRefreshing={isRefreshing}
@@ -929,14 +867,14 @@ function App() {
         } />
 
         <Route path="/index" element={
-          !tableNumber ? <Navigate to="/table-select" replace /> :
+          !tableNumber ? <Navigate to="/index" replace /> :
             <div className="pos-layout">
               {/* ─── POS Header ─── */}
               <header className="pos-header">
                 <div className="pos-header-left">
                   <img src="/logo.png" alt="Logo" className="pos-logo" />
                   <div className="pos-header-info">
-                    <span className="pos-restaurant-name">{lang === 'th' ? 'เสน่ห์' : 'Sa-Nae'}</span>
+                    <span className="pos-restaurant-name">NaraiBoxset</span>
                     <span className="pos-table-label">{lang === 'th' ? `โต๊ะ ${tableNumber}` : `Table ${tableNumber}`}</span>
                   </div>
                 </div>
@@ -974,12 +912,18 @@ function App() {
                       }}
                     />
                   </div>
-                  <button className="pos-header-btn" onClick={() => { setTableNumber(''); navigate('/table-select'); }}>
-                    🪑 {lang === 'th' ? 'เลือกโต๊ะ' : 'Tables'}
-                  </button>
                   <button className="pos-header-btn" onClick={() => navigate('/table-orders')}>
-                    🧾 {lang === 'th' ? 'รายการโต๊ะ' : 'Table'}
+                    🧾 {lang === 'th' ? 'สรุปบิล' : 'Bill Summary'}
                   </button>
+                  <button
+                    onClick={refreshTableOrders}
+                    disabled={isRefreshing}
+                    className="pos-header-btn"
+                  >
+                    <RefreshCw size={14} style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }} />
+                    {isRefreshing ? (lang === 'th' ? 'กำลังโหลด...' : 'Loading...') : (lang === 'th' ? 'รีเฟรช' : 'Refresh')}
+                  </button>
+
                   <button className="pos-header-btn" onClick={() => setLang(lang === 'th' ? 'en' : 'th')}>
                     <Globe size={14} /> {lang === 'th' ? 'TH' : 'EN'}
                   </button>

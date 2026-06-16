@@ -13,7 +13,7 @@ const AdminLayout = ({ lang, setLang, isCashier = false }) => {
        <aside className="admin-sidebar">
           <div className="admin-logo">
              <h2>👑 {lang === 'th' ? 'แผงควบคุม' : 'Admin Panel'}</h2>
-             <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>{lang === 'th' ? 'เสน่ห์' : 'SA-NAE'}</p>
+             <p style={{ margin: '0.25rem 0 0 0', color: 'var(--text-muted)', fontSize: '0.85rem' }}>NaraiBoxset</p>
           </div>
           <nav className="admin-nav">
              <NavLink to="/admin" end className={({isActive}) => isActive ? "admin-link active" : "admin-link"}>
@@ -75,7 +75,7 @@ const AdminLayout = ({ lang, setLang, isCashier = false }) => {
                 <Globe size={20} /> {lang === 'th' ? 'English' : 'ภาษาไทย'}
              </button>
 
-             <button className="admin-link logout" style={{ marginTop: '0.5rem' }} onClick={() => navigate('/table-select')}>
+             <button className="admin-link logout" style={{ marginTop: '0.5rem' }} onClick={() => navigate('/index')}>
                 <LogOut size={20} /> {lang === 'th' ? 'กลับสู่หน้าร้าน' : 'Exit to Storefront'}
              </button>
           </nav>

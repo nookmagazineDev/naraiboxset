@@ -42,7 +42,7 @@ const ShiftModal = ({ mode, currentShift, shiftSales, currentUser, pendingTables
       return `<div class="it"><div class="row"><span>โต๊ะ ${t.tableNo}${who ? ' · ' + who : ''}</span><span>฿${fmt(t.total)}</span></div></div>`;
     }).join('');
     return `
-      <div class="c xl">เสน่ห์</div>
+      <div class="c xl">NaraiBoxset</div>
       <div class="c sm">รายงานปิดกะ / SHIFT REPORT</div>
       <div class="hr"></div>
       ${line('กะ', currentShift?.id || '-')}

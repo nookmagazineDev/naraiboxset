@@ -123,7 +123,7 @@ const TableOrderView = ({
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              {lang === 'th' ? `โต๊ะ ${tableNumber}` : `Table ${tableNumber}`}
+              {lang === 'th' ? 'สรุปบิล' : 'Bill Summary'}
               {currentCount && (
                 <span 
                   onClick={() => {
@@ -134,11 +134,11 @@ const TableOrderView = ({
                     fontSize: '0.9rem',
                     fontWeight: '600',
                     color: 'var(--accent)',
-                    background: 'rgba(249,115,22,0.1)',
+                    background: 'rgba(250,204,21,0.1)',
                     padding: '2px 8px',
                     borderRadius: '12px',
                     cursor: 'pointer',
-                    border: '1px solid rgba(249,115,22,0.3)'
+                    border: '1px solid rgba(250,204,21,0.3)'
                   }}
                 >
                   ({currentCount} {lang === 'th' ? 'ท่าน' : 'pax'})
@@ -304,7 +304,7 @@ const TableOrderView = ({
               return (
                 <div key={idx} style={{
                   background: 'var(--bg-card)',
-                  border: `1px solid ${selectedIdx.includes(idx) ? 'rgba(249,115,22,0.5)' : 'rgba(255,255,255,0.07)'}`,
+                  border: `1px solid ${selectedIdx.includes(idx) ? 'rgba(250,204,21,0.5)' : 'rgba(255,255,255,0.07)'}`,
                   borderRadius: '14px',
                   padding: '1rem 1.1rem',
                   display: 'flex',
@@ -318,8 +318,8 @@ const TableOrderView = ({
                     style={{ width: '18px', height: '18px', marginTop: '0.35rem', cursor: 'pointer', flexShrink: 0 }}
                   />
                   <div style={{
-                    background: 'rgba(249,115,22,0.12)',
-                    border: '1px solid rgba(249,115,22,0.3)',
+                    background: 'rgba(250,204,21,0.12)',
+                    border: '1px solid rgba(250,204,21,0.3)',
                     borderRadius: '8px',
                     padding: '0.35rem 0.65rem',
                     fontWeight: '700',
@@ -486,7 +486,7 @@ const TableOrderView = ({
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '0.5rem',
-                boxShadow: (currentUser?.canCheckout !== false || currentUser?.isAdmin) ? '0 4px 20px rgba(249,115,22,0.4)' : 'none',
+                boxShadow: (currentUser?.canCheckout !== false || currentUser?.isAdmin) ? '0 4px 20px rgba(250,204,21,0.4)' : 'none',
                 transition: 'all 0.2s'
               }}
             >

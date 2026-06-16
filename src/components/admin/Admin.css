@@ -51,7 +51,7 @@
 }
 
 .admin-link:hover, .admin-link.active {
-  background: rgba(249, 115, 22, 0.1);
+  background: rgba(250, 204, 21, 0.1);
   color: var(--accent);
 }
 
@@ -116,7 +116,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(249, 115, 22, 0.1);
+  background: rgba(250, 204, 21, 0.1);
   color: var(--accent);
 }
 
@@ -173,7 +173,7 @@
 
 .admin-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+  box-shadow: 0 4px 12px rgba(250, 204, 21, 0.3);
 }
 
 .admin-btn.secondary {

@@ -3,7 +3,7 @@ import { Plus, Edit2, Trash2, Save, X, Printer, FlaskConical, ChevronRight, Slid
 import { useOutletContext } from 'react-router-dom';
 import { emptyPopupFields, extractPopupConfig, flattenPopupConfig } from '../../utils/popupConfig';
 
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3XyaHUni23zgFET3q7ATSpBTzftfNX7ILvbEYbG134KAl/exec';
 
 const ManageMenu = () => {
   const { lang } = useOutletContext();

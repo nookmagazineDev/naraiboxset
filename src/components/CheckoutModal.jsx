@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { X, CheckCircle, ArrowLeft, CreditCard, Banknote, Smartphone, Tag, ChevronRight, Split, Clock, Camera, Upload } from 'lucide-react';
-import { generatePromptPayPayload } from '../utils/promptpay';
+import { generatePromptPayPayload, generateDynamicQRFromRaw, parseKShopPayload } from '../utils/promptpay';
 import { print80mm, scopedSlipCss } from '../utils/print80mm';
 import { Printer } from 'lucide-react';
 
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3XyaHUni23zgFET3q7ATSpBTzftfNX7ILvbEYbG134KAl/exec';
 
 const calcCharges = (subtotal, settings = {}, discount = null) => {
   let discountAmount = 0;
@@ -34,11 +34,11 @@ const CheckoutModal = ({
   const [cashInput, setCashInput] = useState('');
   const [selectedDiscount, setSelectedDiscount] = useState(null);
 
-  // อนุมัติสร้าง QR โดยแอดมิน/แคชเชียร์ (แจ้งเตือนข้ามเครื่อง → กดยืนยัน)
-  const [qrApproved, setQrApproved] = useState(false);
+  // อนุมัติสร้าง QR โดยแอดมิน/แคชเชียร์ (ปิดการยืนยันแล้ว → เป็น true เสมอ)
+  const [qrApproved, setQrApproved] = useState(true);
   const [approverName, setApproverName] = useState('');
   const [approvalId, setApprovalId] = useState('');
-  const [approvalStatus, setApprovalStatus] = useState('idle'); // idle | pending | approved | rejected
+  const [approvalStatus, setApprovalStatus] = useState('approved'); // idle | pending | approved | rejected
 
   // อัปโหลดสลิปการโอน
   const [slipPreview, setSlipPreview] = useState('');
@@ -105,68 +105,60 @@ const CheckoutModal = ({
   const change = cashAmount - grand;
 
   // ── PromptPay QR ── (เลขพร้อมเพย์ ตั้งได้ที่ตั้งค่าร้าน ไม่งั้นใช้ค่าเริ่มต้น)
-  const promptPayId = settings?.promptPayId || '3101600936940';
+  const promptPayId = settings?.promptPayId || '004000001641684';
+  // ตั้งค่าเริ่มต้นให้เป็น kshop_dynamic อัตโนมัติเลย เพื่อให้เจนยอด K Shop ได้ทันที
+  const qrType = settings?.qrType || 'kshop_dynamic';
+  const staticQrUrl = settings?.staticQrUrl || '/kshop_qr.png';
   const [qrDataUrl, setQrDataUrl] = useState('');
+
+  // ข้อมูลตั้งค่าเริ่มต้นแบบฝังในโค้ดตามคำขอของลูกค้า (K Shop Narai Pizzeria)
+  const kshopRawPayload = settings?.kshopRawPayload || '00020101021130810016A00000067701011201150107536000315080214KB0000016416840320KPS004KB00000164168431690016A00000067701011301030040214KB0000016416840420KPS004KB00000164168453037645802TH6304A14E';
+  const qrShopName = settings?.qrShopName || 'NARAI-KHANOY UNION MALL 4F.';
+  const qrAccountName = settings?.qrAccountName || 'บจก. นารายณ์ พิซเซอเรีย';
 
   // ส่งคำขออนุมัติไปยังแอดมิน/แคชเชียร์
   const requestApproval = () => {
-    const id = `APV-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    setApprovalId(id);
-    setApprovalStatus('pending');
-    setQrApproved(false);
-    setApproverName('');
-    fetch(GAS_URL, {
-      method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'createPaymentApproval',
-        id, tableNo, orderNumber,
-        amount: grand,
-        requestedBy: currentUser?.username || 'ไม่ระบุ'
-      })
-    }).catch(() => {});
+    // ปิดการใช้งานการขออนุมัติแล้ว
   };
 
-  // เข้า/ออกขั้นเงินโอน: เข้า → ส่งคำขอใหม่, ออก → รีเซ็ต (ต้องอนุมัติใหม่ทุกครั้ง)
+  // เข้า/ออกขั้นเงินโอน: ปิดการยืนยัน/อนุมัติทันที
   useEffect(() => {
     if (paymentStep === 'transfer') {
-      if (approvalStatus === 'idle') requestApproval();
+      setQrApproved(true);
+      setApprovalStatus('approved');
     } else {
-      setQrApproved(false); setApproverName(''); setApprovalId(''); setApprovalStatus('idle');
+      setQrApproved(true);
+      setApprovalStatus('approved');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentStep]);
 
   // โพลสถานะคำขออนุมัติ
   useEffect(() => {
-    if (paymentStep !== 'transfer' || approvalStatus !== 'pending' || !approvalId) return;
-    let stop = false;
-    const poll = async () => {
-      try {
-        const res = await fetch(`${GAS_URL}?action=getPaymentApprovals`);
-        const data = await res.json();
-        if (stop || !data.success) return;
-        const mine = (data.approvals || []).find(a => String(a.id) === String(approvalId));
-        if (mine && mine.status === 'approved') {
-          setQrApproved(true); setApproverName(mine.approver || ''); setApprovalStatus('approved');
-        } else if (mine && mine.status === 'rejected') {
-          setApprovalStatus('rejected');
-        }
-      } catch (e) {}
-    };
-    poll();
-    const iv = setInterval(poll, 3000);
-    return () => { stop = true; clearInterval(iv); };
+    // ปิดการดึงสถานะ
   }, [paymentStep, approvalStatus, approvalId]);
+
   useEffect(() => {
-    // สร้าง QR เฉพาะเมื่อได้รับอนุมัติจากแอดมิน/แคชเชียร์แล้วเท่านั้น
-    if (paymentStep !== 'transfer' || grand <= 0 || !qrApproved) { setQrDataUrl(''); return; }
+    // สร้าง QR ทันทีโดยไม่ต้องรอแอดมิน/แคชเชียร์ยืนยัน (เฉพาะเมื่อเป็นแบบ dynamic หรือ kshop_dynamic)
+    const isDynamic = qrType === 'dynamic' || qrType === 'kshop_dynamic';
+    if (!isDynamic || paymentStep !== 'transfer' || grand <= 0) { setQrDataUrl(''); return; }
     let cancelled = false;
-    const payload = generatePromptPayPayload(promptPayId, grand);
-    QRCode.toDataURL(payload, { width: 320, margin: 1, errorCorrectionLevel: 'M' })
-      .then(url => { if (!cancelled) setQrDataUrl(url); })
-      .catch(() => { if (!cancelled) setQrDataUrl(''); });
+
+    let payload = '';
+    if (qrType === 'kshop_dynamic') {
+      payload = generateDynamicQRFromRaw(kshopRawPayload, grand);
+    } else {
+      payload = generatePromptPayPayload(promptPayId, grand);
+    }
+
+    if (payload) {
+      QRCode.toDataURL(payload, { width: 320, margin: 1, errorCorrectionLevel: 'M' })
+        .then(url => { if (!cancelled) setQrDataUrl(url); })
+        .catch(() => { if (!cancelled) setQrDataUrl(''); });
+    } else {
+      setQrDataUrl('');
+    }
     return () => { cancelled = true; };
-  }, [paymentStep, grand, promptPayId, qrApproved]);
+  }, [paymentStep, grand, promptPayId, qrType, kshopRawPayload]);
 
   // split helpers
   const splitCashN = parseFloat(splitCash) || 0;
@@ -214,7 +206,7 @@ const CheckoutModal = ({
     }).join('');
     const line = (k, v, cls = '') => `<div class="row ${cls}"><span>${k}</span><span>${v}</span></div>`;
     return `
-      <div class="c xl">เสน่ห์</div>
+      <div class="c xl">NaraiBoxset</div>
       <div class="c sm">ใบเสร็จรับเงิน / RECEIPT</div>
       <div class="hr"></div>
       ${line('บิลเลขที่', orderNumber || '-')}
@@ -750,9 +742,11 @@ const CheckoutModal = ({
               <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem', color: 'white' }}>
                 {lang === 'th' ? 'สแกนเพื่อชำระเงิน' : 'Scan to Pay'}
               </h3>
-              <p style={{ color: '#22c55e', fontSize: '0.8rem', margin: '0 0 0.25rem' }}>
-                ✓ {lang === 'th' ? `อนุมัติโดย ${approverName}` : `Approved by ${approverName}`}
-              </p>
+              {approverName && (
+                <p style={{ color: '#22c55e', fontSize: '0.8rem', margin: '0 0 0.25rem' }}>
+                  ✓ {lang === 'th' ? `อนุมัติโดย ${approverName}` : `Approved by ${approverName}`}
+                </p>
+              )}
               <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', margin: '0 0 0.85rem' }}>
                 {lang === 'th' ? 'พร้อมเพย์ (PromptPay) — รองรับทุกแอปธนาคาร' : 'PromptPay — works with any Thai banking app'}
               </p>
@@ -765,7 +759,9 @@ const CheckoutModal = ({
                 <div style={{ background: '#003d6a', color: 'white', fontWeight: 800, fontSize: '0.9rem', borderRadius: '8px', padding: '0.35rem', marginBottom: '0.85rem' }}>
                   PromptPay
                 </div>
-                {qrDataUrl ? (
+                {qrType === 'static' ? (
+                  <img src={staticQrUrl} alt="K Shop QR" style={{ width: '100%', maxWidth: '260px', display: 'block', margin: '0 auto' }} />
+                ) : qrDataUrl ? (
                   <img src={qrDataUrl} alt="PromptPay QR" style={{ width: '100%', maxWidth: '260px', display: 'block', margin: '0 auto' }} />
                 ) : (
                   <div style={{ height: '260px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
@@ -773,7 +769,25 @@ const CheckoutModal = ({
                   </div>
                 )}
                 <div style={{ color: '#003d6a', marginTop: '0.65rem' }}>
-                  <div style={{ fontSize: '0.78rem', opacity: 0.8 }}>{lang === 'th' ? 'พร้อมเพย์ ID' : 'PromptPay ID'}: {promptPayId}</div>
+                  <div style={{ fontSize: '0.78rem', opacity: 0.8 }}>
+                    {qrType === 'static' ? (
+                      (lang === 'th' ? 'สแกน QR ร้านค้าด้านบน' : 'Scan merchant QR above')
+                    ) : qrType === 'kshop_dynamic' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', textAlign: 'center', color: '#003d6a', fontWeight: '700' }}>
+                        <div style={{ fontSize: '0.85rem', textTransform: 'uppercase' }}>
+                          {qrShopName}
+                        </div>
+                        <div style={{ fontWeight: 'normal', opacity: 0.9 }}>
+                          บัญชี: {qrAccountName}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 'normal', opacity: 0.7 }}>
+                          เลขอ้างอิง: {parseKShopPayload(kshopRawPayload)?.ref2 || 'KPS004KB000001641684'}
+                        </div>
+                      </div>
+                    ) : (
+                      (lang === 'th' ? 'พร้อมเพย์ ID' : 'PromptPay ID') + ': ' + promptPayId
+                    )}
+                  </div>
                   <div style={{ fontSize: '1.4rem', fontWeight: 900, marginTop: '0.15rem' }}>฿{grand.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 </div>
               </div>

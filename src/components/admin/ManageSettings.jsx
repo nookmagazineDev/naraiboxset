@@ -1,12 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, ToggleLeft, ToggleRight, Save, Info, QrCode } from 'lucide-react';
+import { Settings, ToggleLeft, ToggleRight, Save, Info, QrCode, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
+import jsQR from 'jsqr';
+import { parseKShopPayload } from '../../utils/promptpay';
 
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbzxzhnOhSPWssbEfRVG8doa4G4fQ_98B9_Kog34gguPrG7fgbY5gPnuvTIoneJcmdKgrA/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3XyaHUni23zgFET3q7ATSpBTzftfNX7ILvbEYbG134KAl/exec';
 
 const DEFAULT_SETTINGS = {
   serviceCharge: { enabled: false, rate: 10 },
   vat: { enabled: false, rate: 7 },
-  promptPayId: ''
+  promptPayId: '',
+  qrType: 'dynamic', // 'dynamic' | 'static' | 'kshop_dynamic'
+  staticQrUrl: '/kshop_qr.png',
+  kshopRawPayload: '',
+  qrShopName: '',
+  qrAccountName: ''
 };
 
 const ToggleBtn = ({ checked, onChange }) => (
@@ -21,6 +28,7 @@ const ToggleBtn = ({ checked, onChange }) => (
 const ManageSettings = () => {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   useEffect(() => {
     const stored = localStorage.getItem('pos_settings');
@@ -46,6 +54,52 @@ const ManageSettings = () => {
     setSettings(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
     setSaved(false);
   };
+
+  const handleQrUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadError('');
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        
+        try {
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const code = jsQR(imageData.data, imageData.width, imageData.height);
+          if (code && code.data) {
+            if (!code.data.startsWith('000201')) {
+              setUploadError('QR Code นี้ไม่ใช่รูปแบบมาตรฐานพร้อมเพย์หรือ Thai QR (ไม่ขึ้นต้นด้วย 000201) กรุณาตรวจสอบรูปภาพครับ');
+              return;
+            }
+            setSettings(prev => ({
+              ...prev,
+              kshopRawPayload: code.data,
+              qrType: 'kshop_dynamic'
+            }));
+            setSaved(false);
+          } else {
+            setUploadError('ไม่สามารถถอดรหัส QR Code จากรูปนี้ได้ กรุณาครอปภาพให้เห็นเฉพาะใบ QR หรือใช้รูปสกรีนช็อตที่ชัดเจนกว่านี้ครับ');
+          }
+        } catch (err) {
+          setUploadError('เกิดข้อผิดพลาดในการอ่านไฟล์ภาพ: ' + err.message);
+        }
+      };
+      img.onerror = () => {
+        setUploadError('ไม่สามารถโหลดไฟล์ภาพนี้ได้ กรุณาลองใหม่อีกครั้ง');
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const decodedDetails = parseKShopPayload(settings.kshopRawPayload);
 
   const exampleSubtotal = 300;
   const scAmount = settings.serviceCharge.enabled ? Math.round(exampleSubtotal * settings.serviceCharge.rate) / 100 : 0;
@@ -147,29 +201,168 @@ const ManageSettings = () => {
         </div>
       )}
 
-      {/* PromptPay (QR ชำระเงิน) Card */}
+      {/* PromptPay / QR ชำระเงิน Card */}
       <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
-        <div style={{ marginBottom: '1rem' }}>
+        <div style={{ marginBottom: '1.25rem' }}>
           <h3 style={{ color: 'white', margin: '0 0 0.3rem', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <QrCode size={18} color="#60a5fa" /> พร้อมเพย์ (QR ชำระเงิน)
+            <QrCode size={18} color="#60a5fa" /> รูปแบบ QR ชำระเงิน (เงินโอน)
           </h3>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', margin: 0 }}>
-            เลขที่ใช้สร้าง QR ในหน้าชำระเงิน (เงินโอน) — เบอร์มือถือ หรือ เลขบัตรประชาชน/ผู้เสียภาษี
+            เลือกรูปแบบ QR ที่จะแสดงในขั้นตอนเช็คบิลผ่านเงินโอน
           </p>
         </div>
-        <input
-          type="text"
-          inputMode="numeric"
-          value={settings.promptPayId || ''}
-          onChange={(e) => { setSettings(prev => ({ ...prev, promptPayId: e.target.value.replace(/[^0-9]/g, '') })); setSaved(false); }}
-          placeholder="เช่น 3101600936940 หรือ 0812345678"
-          style={{ width: '100%', padding: '0.7rem 0.9rem', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', color: 'white', fontSize: '1.05rem', fontWeight: '700', letterSpacing: '0.04em', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
-        />
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0.6rem 0 0' }}>
-          {settings.promptPayId
-            ? '✅ จะใช้เลขนี้สร้าง QR พร้อมยอดที่ต้องชำระ'
-            : 'ℹ️ ถ้าเว้นว่าง จะใช้ค่าเริ่มต้น 3101600936940'}
-        </p>
+
+        {/* QR Type Selection */}
+        <div style={{ display: 'flex', gap: '0.65rem', marginBottom: '1.25rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => { setSettings(prev => ({ ...prev, qrType: 'kshop_dynamic' })); setSaved(false); }}
+            style={{
+              flex: '1 1 100%', padding: '0.8rem', borderRadius: '10px',
+              background: (settings.qrType || 'dynamic') === 'kshop_dynamic' ? 'rgba(34,197,94,0.15)' : 'rgba(0,0,0,0.25)',
+              border: (settings.qrType || 'dynamic') === 'kshop_dynamic' ? '1px solid #22c55e' : '1px solid rgba(255,255,255,0.1)',
+              color: (settings.qrType || 'dynamic') === 'kshop_dynamic' ? '#22c55e' : 'var(--text-muted)',
+              fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+            }}
+          >
+            <span>K Shop (Dynamic QR) — เจนยอดเงินอัตโนมัติ ⭐</span>
+          </button>
+          
+          <button
+            onClick={() => { setSettings(prev => ({ ...prev, qrType: 'dynamic' })); setSaved(false); }}
+            style={{
+              flex: '1 1 48%', padding: '0.75rem', borderRadius: '10px',
+              background: (settings.qrType || 'dynamic') === 'dynamic' ? 'rgba(96,165,250,0.15)' : 'rgba(0,0,0,0.25)',
+              border: (settings.qrType || 'dynamic') === 'dynamic' ? '1px solid #60a5fa' : '1px solid rgba(255,255,255,0.1)',
+              color: (settings.qrType || 'dynamic') === 'dynamic' ? '#60a5fa' : 'var(--text-muted)',
+              fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit'
+            }}
+          >
+            พร้อมเพย์ทั่วไป (Dynamic QR)
+          </button>
+          
+          <button
+            onClick={() => { setSettings(prev => ({ ...prev, qrType: 'static' })); setSaved(false); }}
+            style={{
+              flex: '1 1 48%', padding: '0.75rem', borderRadius: '10px',
+              background: (settings.qrType || 'dynamic') === 'static' ? 'rgba(250,204,21,0.15)' : 'rgba(0,0,0,0.25)',
+              border: (settings.qrType || 'dynamic') === 'static' ? '1px solid #facc15' : '1px solid rgba(255,255,255,0.1)',
+              color: (settings.qrType || 'dynamic') === 'static' ? '#facc15' : 'var(--text-muted)',
+              fontWeight: '700', fontSize: '0.9rem', cursor: 'pointer', fontFamily: 'inherit'
+            }}
+          >
+            ใช้รูปภาพ QR นิ่ง (Static QR)
+          </button>
+        </div>
+
+        {settings.qrType === 'kshop_dynamic' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              อัปโหลดรูปภาพหน้าจอ QR K Shop (ระบบจะสแกนและดึงบัญชีโดยอัตโนมัติ)
+            </label>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <label style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1rem',
+                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: '8px', color: 'white', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '700'
+              }}>
+                <Upload size={16} /> เลือกรูปภาพสกรีนช็อต
+                <input type="file" accept="image/*" onChange={handleQrUpload} style={{ display: 'none' }} />
+              </label>
+              
+              {settings.kshopRawPayload ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#22c55e', fontSize: '0.85rem', fontWeight: '600' }}>
+                  <CheckCircle2 size={16} /> ตรวจสอบบัญชี K Shop สำเร็จแล้ว
+                </div>
+              ) : (
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  ยังไม่ได้เพิ่มข้อมูล QR
+                </div>
+              )}
+            </div>
+
+            {uploadError && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444', fontSize: '0.82rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', padding: '0.5rem 0.75rem' }}>
+                <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                <span>{uploadError}</span>
+              </div>
+            )}
+
+            {decodedDetails && (
+              <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '10px', padding: '0.75rem 1rem', fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <div style={{ fontWeight: '700', color: 'white', marginBottom: '0.15rem', fontSize: '0.9rem' }}>ข้อมูลบัญชีที่ตรวจพบ:</div>
+                {decodedDetails.ref1 && (
+                  <div>• Ref 1 (เลขอ้างอิงหลัก): <strong style={{ color: '#22c55e', wordBreak: 'break-all' }}>{decodedDetails.ref1}</strong></div>
+                )}
+                {decodedDetails.ref2 && (
+                  <div>• Ref 2 (เลขอ้างอิง K Shop): <strong style={{ color: '#22c55e', wordBreak: 'break-all' }}>{decodedDetails.ref2}</strong></div>
+                )}
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '0.2rem' }}>
+                  * บัญชีนี้จะถูกใช้เพื่อสร้าง Dynamic QR Code ชำระเงินแนบยอดบิลอัตโนมัติในตอนเช็คบิล
+                </div>
+              </div>
+            )}
+
+            {/* ช่องกรอกชื่อร้านและชื่อบัญชีเพิ่มเติม */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem', borderTop: '1px dashed rgba(255,255,255,0.1)', paddingTop: '0.75rem' }}>
+              <div>
+                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.82rem', marginBottom: '0.35rem' }}>ชื่อร้านค้าที่จะให้แสดงบนการ์ด QR (เช่น NARAI-KHANOY UNION MALL 4F.)</label>
+                <input
+                  type="text"
+                  value={settings.qrShopName || ''}
+                  onChange={(e) => { setSettings(prev => ({ ...prev, qrShopName: e.target.value })); setSaved(false); }}
+                  placeholder="เช่น NARAI-KHANOY UNION MALL 4F."
+                  style={{ width: '100%', padding: '0.55rem 0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: 'white', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.82rem', marginBottom: '0.35rem' }}>ชื่อบัญชีรับเงินที่จะให้แสดงบนการ์ด QR (เช่น บจก. นารายณ์ พิซเซอเรีย)</label>
+                <input
+                  type="text"
+                  value={settings.qrAccountName || ''}
+                  onChange={(e) => { setSettings(prev => ({ ...prev, qrAccountName: e.target.value })); setSaved(false); }}
+                  placeholder="เช่น บจก. นารายณ์ พิซเซอเรีย"
+                  style={{ width: '100%', padding: '0.55rem 0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: 'white', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {settings.qrType === 'dynamic' && (
+          <div>
+            <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>หมายเลขพร้อมเพย์ (PromptPay ID)</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={settings.promptPayId || ''}
+              onChange={(e) => { setSettings(prev => ({ ...prev, promptPayId: e.target.value.replace(/[^0-9]/g, '') })); setSaved(false); }}
+              placeholder="เช่น 0812345678 หรือ 004000001641684"
+              style={{ width: '100%', padding: '0.7rem 0.9rem', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', color: 'white', fontSize: '1.05rem', fontWeight: '700', letterSpacing: '0.04em', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+            />
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0.6rem 0 0' }}>
+              {settings.promptPayId
+                ? '✅ จะใช้เลขนี้สร้าง QR พร้อมยอดที่ต้องชำระ'
+                : 'ℹ️ ถ้าเว้นว่าง จะใช้ค่าเริ่มต้น 004000001641684 (K Shop)'}
+            </p>
+          </div>
+        )}
+
+        {settings.qrType === 'static' && (
+          <div>
+            <label style={{ display: 'block', color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>พาธรูปภาพ QR Code (แนะนำให้อัปโหลดไปที่โฟลเดอร์ public/kshop_qr.png)</label>
+            <input
+              type="text"
+              value={settings.staticQrUrl || '/kshop_qr.png'}
+              onChange={(e) => { setSettings(prev => ({ ...prev, staticQrUrl: e.target.value })); setSaved(false); }}
+              placeholder="เช่น /kshop_qr.png หรือ ลิงก์รูปภาพออนไลน์"
+              style={{ width: '100%', padding: '0.7rem 0.9rem', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', color: 'white', fontSize: '1rem', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+            />
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0.6rem 0 0' }}>
+              💡 หากใช้ไฟล์รูปภาพของ K Shop กรุณาเซฟรูปเป็นชื่อ <strong>kshop_qr.png</strong> แล้วนำไปวางไว้ที่โฟลเดอร์ <strong>public</strong> ของโปรเจกต์นี้
+            </p>
+          </div>
+        )}
       </div>
 
       <button

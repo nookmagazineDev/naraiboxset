@@ -6,7 +6,7 @@
 // รองรับ: isAdmin, หมายเหตุอาหาร, popupConfig รายเมนู, ราคาหลายแบบ (prices), แยกจ่าย (splitDetail)
 // ==========================================
 
-var SHEET_ID = '1QSsVi6No7HJKqBcPiXcX_Xs1iMC9SRk6bydJ88dGNP4';
+var SHEET_ID = '1gijgBrK56bsjR7-R5NVWiTGTcxM57wjuYR3FUpl3EDQ';
 
 function getOrCreateSheet(ss, sheetName, headers) {
   var sheet = ss.getSheetByName(sheetName);
@@ -33,6 +33,19 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'OutstandingBills', ['id', 'shiftId', 'tableNo', 'customerName', 'phone', 'total', 'items', 'createdAt', 'status']);
   getOrCreateSheet(ss, 'Shifts', ['id', 'openTime', 'closeTime', 'openStaff', 'closeStaff', 'openCash', 'closeCash', 'totalSales', 'totalCash', 'totalCard', 'totalTransfer', 'totalOrders', 'status', 'note']);
   getOrCreateSheet(ss, 'PaymentSummary', ['timestamp', 'orderNumber', 'tableNo', 'paymentMethod', 'grandTotal', 'staff', 'shiftId', 'splitDetail']);
+}
+
+// ฟังก์ชันสำหรับรันครั้งแรกใน Apps Script เพื่อสร้างชีททั้งหมด (ข้อมูลพื้นฐาน + สต็อก/BOM)
+function initializeAllSheetsAndBOM() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  initializeSheets();
+  _setupIngredients(ss);
+  _setupBOM(ss);
+  _setupStockIn(ss);
+  _setupStockOut(ss);
+  _setupStockSummary(ss);
+  SpreadsheetApp.flush();
+  Logger.log("สร้างชีททั้งหมดพร้อมระบบสต็อก/BOM เรียบร้อยแล้ว!");
 }
 
 // ──────────────────────────────────────────────
