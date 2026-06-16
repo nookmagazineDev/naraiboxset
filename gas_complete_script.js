@@ -99,6 +99,15 @@ function doGet(e) {
     return _bomJson({ success: true, message: 'All data cleared' });
   }
 
+  if (action === 'clearSalesData') {
+    var sheetsToClear = ['Orders', 'TableOrders', 'PaymentSummary', 'PaymentApprovals', 'OutstandingBills', 'Shifts', 'ตัดสต็อก', 'รับวัตถุดิบ', 'LiquorStorage'];
+    sheetsToClear.forEach(function(name) {
+      var sh = ss.getSheetByName(name);
+      if (sh && sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);
+    });
+    return _bomJson({ success: true, message: 'Sales and transaction data cleared successfully' });
+  }
+
   // ── BOM actions ──
   if (action === 'getLiquorRecords') return _bomJson({ success: true, records: getSheetDataAsObjects(ss, 'LiquorStorage') });
 
@@ -573,6 +582,15 @@ function doPost(e) {
     return _bomJson({ success: true, message: 'All data cleared' });
   }
 
+  if (action === 'clearSalesData') {
+    var sheetsToClear = ['Orders', 'TableOrders', 'PaymentSummary', 'PaymentApprovals', 'OutstandingBills', 'Shifts', 'ตัดสต็อก', 'รับวัตถุดิบ', 'LiquorStorage'];
+    sheetsToClear.forEach(function(name) {
+      var sh = ss.getSheetByName(name);
+      if (sh && sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);
+    });
+    return _bomJson({ success: true, message: 'Sales and transaction data cleared successfully' });
+  }
+
   // ── Ingredient actions ──
   if (action === 'upsertIngredient') {
     var sh = ss.getSheetByName('วัตถุดิบ');
@@ -901,4 +919,30 @@ function _bomStyleHeader(range, bgColor) {
   range.setBackground(bgColor).setFontColor('#ffffff').setFontWeight('bold')
     .setHorizontalAlignment('center')
     .setBorder(true,true,true,true,true,true,'#ffffff', SpreadsheetApp.BorderStyle.SOLID);
+}
+
+// ฟังก์ชันสำหรับรันใน Google Apps Script Editor เพื่อล้างข้อมูลการขายและธุรกรรมทั้งหมด
+// โดยจะคงเหลือไว้เฉพาะข้อมูลตั้งค่าระบบ เมนู หมวดหมู่ บัญชีผู้ใช้ เครื่องพิมพ์ และสูตรอาหาร (วัตถุดิบ/BOM)
+function clearSalesAndTransactionsData() {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var sheetsToClear = [
+    'Orders',
+    'TableOrders',
+    'PaymentSummary',
+    'PaymentApprovals',
+    'OutstandingBills',
+    'Shifts',
+    'ตัดสต็อก',
+    'รับวัตถุดิบ',
+    'LiquorStorage'
+  ];
+  
+  sheetsToClear.forEach(function(name) {
+    var sh = ss.getSheetByName(name);
+    if (sh && sh.getLastRow() > 1) {
+      sh.deleteRows(2, sh.getLastRow() - 1);
+    }
+  });
+  
+  Logger.log("ล้างข้อมูลการขาย ธุรกรรม และประวัติสต็อกทั้งหมดเรียบร้อยแล้ว คงเหลือไว้เฉพาะเมนูและหมวดอาหาร!");
 }
