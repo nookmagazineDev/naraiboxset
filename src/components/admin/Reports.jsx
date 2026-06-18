@@ -68,7 +68,7 @@ const card   = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(2
 const th_    = { padding: '0.65rem 0.9rem', textAlign: 'left', color: 'rgba(255,255,255,0.45)', fontWeight: 600, fontSize: '0.78rem', borderBottom: '1px solid rgba(255,255,255,0.07)', whiteSpace: 'nowrap' };
 const td_    = { padding: '0.65rem 0.9rem', fontSize: '0.875rem', borderBottom: '1px solid rgba(255,255,255,0.04)' };
 
-export default function Reports() {
+export default function Reports({ allMenu = [] }) {
   const [tab,     setTab]     = useState('daily');
   const [from,    setFrom]    = useState(TODAY);
   const [to,      setTo]      = useState(TODAY);
@@ -146,20 +146,72 @@ export default function Reports() {
 
   // Tab: menu
   const menuMap = {};
-  (data?.orders || []).forEach(r => {
-    if (!r.ItemDetail || String(r.ItemDetail).startsWith('↳') || r.Status === 'cancelled') return;
-    const detail = String(r.ItemDetail).trim();
-    let qty = 1;
-    let name = detail;
-    const match = detail.match(/(.*?)\s*\(x(\d+)\)$/);
-    if (match) {
-      name = match[1].trim();
-      qty = parseInt(match[2], 10) || 1;
+  const priceNames = new Set(['ปกติ', 'ทั่วไป', 'ราคาปกติ', 'ราคาพิเศษ', 'พนักงาน', 'จัดส่ง']);
+  (allMenu || []).forEach(item => {
+    if (Array.isArray(item.prices)) {
+      item.prices.forEach(p => {
+        if (p.name) priceNames.add(p.name.trim());
+      });
     }
-    if (!menuMap[name]) menuMap[name] = { name: name, qty: 0, revenue: 0 };
-    menuMap[name].qty += qty;
-    menuMap[name].revenue += Number(r.Price) || 0;
   });
+
+  const ordersGroupedByNum = {};
+  (data?.orders || []).forEach(r => {
+    if (!r.OrderNumber || r.Status === 'cancelled') return;
+    if (!ordersGroupedByNum[r.OrderNumber]) ordersGroupedByNum[r.OrderNumber] = [];
+    ordersGroupedByNum[r.OrderNumber].push(r);
+  });
+
+  Object.values(ordersGroupedByNum).forEach(orderRows => {
+    let lastMainItemQty = 1;
+    orderRows.forEach(r => {
+      const isSub = String(r.ItemDetail || '').trim().startsWith('↳');
+      if (!isSub) {
+        // Main item
+        const detail = String(r.ItemDetail).trim();
+        let qty = 1;
+        let name = detail;
+        const match = detail.match(/(.*?)\s*\(x(\d+)\)$/);
+        if (match) {
+          name = match[1].trim();
+          qty = parseInt(match[2], 10) || 1;
+        }
+        lastMainItemQty = qty;
+
+        if (!menuMap[name]) menuMap[name] = { name: name, qty: 0, revenue: 0 };
+        menuMap[name].qty += qty;
+        menuMap[name].revenue += Number(r.Price) || 0;
+      } else {
+        // Option/Popup sub-item
+        const optionsText = String(r.ItemDetail).replace(/^↳/, '').trim();
+        const parts = optionsText.split(',');
+        parts.forEach(part => {
+          const trimmed = part.trim();
+          if (!trimmed) return;
+          
+          // Ignore non-food text
+          if (trimmed.startsWith('ลูกค้า:') || trimmed.startsWith('ความเผ็ด:') || trimmed.includes('📝') || trimmed.startsWith('โต๊ะ')) return;
+          if (['ทานที่ร้าน', 'กลับบ้าน', 'delivery', 'เดลิเวอรี่', 'dine-in', 'takeaway', 'dine in', 'take away'].includes(trimmed.toLowerCase())) return;
+          if (priceNames.has(trimmed)) return;
+          
+          // Parse name and quantity from subitem part, e.g. "ไข่ดาว ×2" or "ไข่ดาว x2"
+          let name = trimmed;
+          let subQty = 1;
+          const qtyMatch = trimmed.match(/(.*?)\s*[×xX]\s*(\d+)$/) || trimmed.match(/(.*?)\s*\(x(\d+)\)$/);
+          if (qtyMatch) {
+            name = qtyMatch[1].trim();
+            subQty = parseInt(qtyMatch[2], 10) || 1;
+          }
+          
+          const totalSubQty = lastMainItemQty * subQty;
+          
+          if (!menuMap[name]) menuMap[name] = { name: name, qty: 0, revenue: 0 };
+          menuMap[name].qty += totalSubQty;
+        });
+      }
+    });
+  });
+
   const menuRows = Object.values(menuMap).sort((a, b) => b.qty - a.qty);
 
   // ─── Export handlers ─────────────────────────────────────

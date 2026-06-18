@@ -206,6 +206,7 @@ function App() {
   const [checkoutTotal, setCheckoutTotal] = useState(0);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [showSalesSummaryModal, setShowSalesSummaryModal] = useState(false);
+  const [salesSummaryMode, setSalesSummaryMode] = useState('daily'); // 'daily' | 'range'
 
   // เก็บ JSON ของแต่ละส่วนที่ apply ไปแล้ว → อัปเดต state เฉพาะส่วนที่เปลี่ยนจริง (กัน re-render ทั้งแอปทุก 10 วิ)
   const appliedRef = React.useRef({});
@@ -943,8 +944,11 @@ function App() {
                   <button className="pos-header-btn" onClick={() => navigate('/table-orders')}>
                     🧾 {lang === 'th' ? 'สรุปบิล' : 'Bill Summary'}
                   </button>
-                  <button className="pos-header-btn" onClick={() => setShowSalesSummaryModal(true)} style={{ background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc' }}>
-                    📊 {lang === 'th' ? 'สรุปยอดขาย' : 'Sales Summary'}
+                  <button className="pos-header-btn" onClick={() => { setSalesSummaryMode('daily'); setShowSalesSummaryModal(true); }} style={{ background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc' }}>
+                    📊 {lang === 'th' ? 'สรุปยอดขายวันนี้' : 'Today Sales'}
+                  </button>
+                  <button className="pos-header-btn" onClick={() => { setSalesSummaryMode('range'); setShowSalesSummaryModal(true); }} style={{ background: 'rgba(56,189,248,0.15)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8' }}>
+                    📅 {lang === 'th' ? 'สรุปยอดขายระหว่างวัน' : 'Sales Range'}
                   </button>
                   <button
                     onClick={refreshTableOrders}
@@ -1067,7 +1071,7 @@ function App() {
           <Route path="settings" element={isAdmin ? <ManageSettings /> : <Navigate to="/admin" replace />} />
           <Route path="bom" element={isAdmin ? <ManageBOM /> : <Navigate to="/admin" replace />} />
           <Route path="stock" element={<ManageStock />} />
-          <Route path="reports" element={isAdmin ? <Reports /> : <Navigate to="/admin" replace />} />
+          <Route path="reports" element={isAdmin ? <Reports allMenu={allMenu} /> : <Navigate to="/admin" replace />} />
         </Route>
       </Routes>
       </Suspense>
@@ -1113,6 +1117,8 @@ function App() {
       {showSalesSummaryModal && (
         <SalesSummaryModal
           lang={lang}
+          initialMode={salesSummaryMode}
+          allMenu={allMenu}
           onClose={() => setShowSalesSummaryModal(false)}
         />
       )}
