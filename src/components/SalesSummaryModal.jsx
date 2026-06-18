@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { X, RefreshCw, Download, Calendar, TrendingUp, BarChart2, CheckCircle, Search, ArrowLeft, ChevronRight, Receipt, CreditCard } from 'lucide-react';
+import { X, RefreshCw, Download, Calendar, TrendingUp, BarChart2, CheckCircle, Search, ArrowLeft, ChevronRight, Receipt, CreditCard, FileSpreadsheet } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3XyaHUni23zgFET3q7ATSpBTzftfNX7ILvbEYbG134KAl/exec';
@@ -271,6 +271,86 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
       console.error(err);
       if (btn) btn.innerText = lang === 'th' ? '❌ เกิดข้อผิดพลาด' : '❌ Error';
     });
+  };
+
+  const downloadExcelCSV = (headers, rows, filename) => {
+    const BOM = '\uFEFF'; // UTF-8 BOM
+    const csvContent = BOM + [headers, ...rows].map(row => 
+      row.map(val => {
+        const s = String(val ?? '');
+        return (s.includes(',') || s.includes('"') || s.includes('\n'))
+          ? `"${s.replace(/"/g, '""')}"` : s;
+      }).join(',')
+    ).join('\r\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${filename}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportExcel = () => {
+    if (view === 'summary') {
+      const headers = ['หัวข้อ', 'รายละเอียด', '', '', ''];
+      const rows = [
+        ['สรุปยอดขาย NaraiBoxset', ''],
+        ['ช่วงวันที่เริ่มต้น', from],
+        ['ช่วงวันที่สิ้นสุด', to],
+        ['ยอดขายทั้งหมด (บาท)', totalSales],
+        ['จำนวนบิลทั้งหมด', totalBills],
+        ['ยอดเงินสด (บาท)', totalCash],
+        ['ยอดเงินโอน (บาท)', totalXfer],
+        ['ยอดบัตรเครดิต (บาท)', totalCard],
+        [],
+        ['ยอดขายสะสมรายเมนู'],
+        ['อันดับ', 'ชื่อเมนู', 'ประเภท', 'จำนวนที่ขายได้', 'รายได้รวม (บาท)'],
+        ...menuRows.map((r, i) => [
+          i + 1,
+          r.name,
+          r.isSubItem ? 'ตัวเลือกเสริม/ชุด' : 'จานหลัก',
+          r.qty,
+          r.isSubItem ? 0 : r.revenue
+        ])
+      ];
+      downloadExcelCSV(headers, rows, `สรุปยอดขาย_${from}_ถึง_${to}`);
+    } else {
+      const headers = ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'รายละเอียดการชำระเงิน', 'ยอดรวม (บาท)', 'รายการอาหาร'];
+      const rows = filteredBills.map(bill => {
+        let splitLabel = '';
+        if (bill.splitDetail) {
+          const sd = bill.splitDetail;
+          const parts = [];
+          if (sd.cash > 0) parts.push(`สด ฿${sd.cash}`);
+          if (sd.transfer > 0) parts.push(`โอน ฿${sd.transfer}`);
+          if (sd.card > 0) parts.push(`บัตร ฿${sd.card}`);
+          splitLabel = parts.join(', ');
+        }
+        
+        const itemsText = bill.items.map(it => {
+          let text = `${it.name} (x1) - ฿${it.price}`;
+          if (it.subItems && it.subItems.length > 0) {
+            text += ` [ตัวเลือก: ${it.subItems.map(sub => sub.replace(/^↳/, '').trim()).join('; ')}]`;
+          }
+          return text;
+        }).join(' | ');
+
+        return [
+          bill.orderNumber,
+          bill.customerName,
+          formatTimeThai(bill.timestamp),
+          bill.paymentMethod,
+          splitLabel || '—',
+          bill.total,
+          itemsText
+        ];
+      });
+      downloadExcelCSV(headers, rows, `รายละเอียดบิล_${from}_ถึง_${to}`);
+    }
   };
 
   const fmt = (n) => (Number(n) || 0).toLocaleString('th-TH');
@@ -613,10 +693,17 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
             {lang === 'th' ? 'ปิดหน้าต่าง' : 'Close'}
           </button>
           
-          {view === 'summary' && !loading && data && (
-            <button id="capture-btn" onClick={handleDownloadImage} style={{ flex: 2, padding: '0.7rem', background: '#7c3aed', border: 'none', color: 'white', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(124,58,237,0.3)', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#6d28d9'} onMouseLeave={e => e.currentTarget.style.background = '#7c3aed'}>
-              <Download size={16} /> {lang === 'th' ? 'บันทึกภาพสรุป (PNG)' : 'Save as PNG'}
-            </button>
+          {!loading && data && (
+            <>
+              {view === 'summary' && (
+                <button id="capture-btn" onClick={handleDownloadImage} style={{ flex: 1.2, padding: '0.7rem', background: '#7c3aed', border: 'none', color: 'white', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(124,58,237,0.3)', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#6d28d9'} onMouseLeave={e => e.currentTarget.style.background = '#7c3aed'}>
+                  <Download size={16} /> {lang === 'th' ? 'รูปภาพ (PNG)' : 'Save as PNG'}
+                </button>
+              )}
+              <button onClick={handleExportExcel} style={{ flex: 1.5, padding: '0.7rem', background: '#10b981', border: 'none', color: 'white', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontFamily: 'inherit', boxShadow: '0 4px 15px rgba(16,185,129,0.3)', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#059669'} onMouseLeave={e => e.currentTarget.style.background = '#10b981'}>
+                <FileSpreadsheet size={16} /> {lang === 'th' ? 'ส่งออก Excel' : 'Export Excel'}
+              </button>
+            </>
           )}
         </div>
 
