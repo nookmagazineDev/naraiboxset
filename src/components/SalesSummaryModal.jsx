@@ -32,6 +32,21 @@ const getThaiMonthStartStr = () => {
   return `${p.year}-${p.month}-01`;
 };
 
+const parseItemQty = (detail) => {
+  const s = String(detail).trim();
+  let qty = 1;
+  let name = s;
+  
+  const match = s.match(/(.*?)\s*[\(\[]\s*x?\s*(\d+)\s*[\)\]]$/i) ||
+                s.match(/(.*?)\s*[xX*×]\s*(\d+)$/);
+                
+  if (match) {
+    name = match[1].trim();
+    qty = parseInt(match[2], 10) || 1;
+  }
+  return { name, qty };
+};
+
 const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], onClose }) => {
   const todayStr = getThaiTodayStr();
   
@@ -118,8 +133,27 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
         if (!lastItem.subItems) lastItem.subItems = [];
         lastItem.subItems.push(r.ItemDetail);
       } else {
+        const detail = String(r.ItemDetail).trim();
+        let qty = 1;
+        
+        // 1. Check from r.Quantity
+        if (r.Quantity !== undefined && r.Quantity !== null && String(r.Quantity).trim() !== '') {
+          const parsedQty = parseInt(r.Quantity, 10);
+          if (!isNaN(parsedQty) && parsedQty > 0) {
+            qty = parsedQty;
+          }
+        }
+        
+        // 2. Parse from detail string for legacy
+        const parsed = parseItemQty(detail);
+        if (qty === 1 && parsed.qty > 1) {
+          qty = parsed.qty;
+        }
+        const cleanName = parsed.name;
+
         billMap[r.OrderNumber].items.push({
-          name: r.ItemDetail,
+          name: cleanName,
+          qty: qty,
           price: Number(r.Price) || 0,
           subItems: []
         });
@@ -171,15 +205,29 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
         // Main item
         const detail = String(r.ItemDetail).trim();
         let qty = 1;
-        let name = detail;
-        const match = detail.match(/(.*?)\s*\(x(\d+)\)$/);
-        if (match) {
-          name = match[1].trim();
-          qty = parseInt(match[2], 10) || 1;
+        
+        // 1. Check from r.Quantity
+        if (r.Quantity !== undefined && r.Quantity !== null && String(r.Quantity).trim() !== '') {
+          const parsedQty = parseInt(r.Quantity, 10);
+          if (!isNaN(parsedQty) && parsedQty > 0) {
+            qty = parsedQty;
+          }
         }
+        
+        // 2. Parse from detail string for legacy
+        const parsed = parseItemQty(detail);
+        if (qty === 1 && parsed.qty > 1) {
+          qty = parsed.qty;
+        }
+        const name = parsed.name;
+        
         lastMainItemQty = qty;
 
-        if (!menuMap[name]) menuMap[name] = { name, qty: 0, revenue: 0, isSubItem: false };
+        if (!menuMap[name]) {
+          menuMap[name] = { name, qty: 0, revenue: 0, isSubItem: false };
+        } else {
+          menuMap[name].isSubItem = false;
+        }
         menuMap[name].qty += qty;
         menuMap[name].revenue += Number(r.Price) || 0;
       } else {
@@ -195,14 +243,10 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
           if (['ทานที่ร้าน', 'กลับบ้าน', 'delivery', 'เดลิเวอรี่', 'dine-in', 'takeaway', 'dine in', 'take away'].includes(trimmed.toLowerCase())) return;
           if (priceNames.has(trimmed)) return;
           
-          // Parse name and quantity from subitem part, e.g. "ไข่ดาว ×2" or "ไข่ดาว x2"
-          let name = trimmed;
-          let subQty = 1;
-          const qtyMatch = trimmed.match(/(.*?)\s*[×xX]\s*(\d+)$/) || trimmed.match(/(.*?)\s*\(x(\d+)\)$/);
-          if (qtyMatch) {
-            name = qtyMatch[1].trim();
-            subQty = parseInt(qtyMatch[2], 10) || 1;
-          }
+          // Parse name and quantity from subitem part using parseItemQty
+          const parsed = parseItemQty(trimmed);
+          const name = parsed.name;
+          const subQty = parsed.qty;
           
           const totalSubQty = lastMainItemQty * subQty;
           
@@ -214,6 +258,8 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
   });
 
   const menuRows = Object.values(menuMap).sort((a, b) => b.qty - a.qty);
+  const totalMenuRevenue = menuRows.reduce((sum, r) => sum + (r.isSubItem ? 0 : r.revenue), 0);
+  const menuAdjustment = totalSales - totalMenuRevenue;
 
   // Filter bills by search query
   const filteredBills = useMemo(() => {
@@ -249,12 +295,8 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
             const parts = optionsText.split(',');
             parts.forEach(part => {
               const trimmed = part.trim();
-              let name = trimmed;
-              const qtyMatch = trimmed.match(/(.*?)\s*[×xX]\s*(\d+)$/) || trimmed.match(/(.*?)\s*\(x(\d+)\)$/);
-              if (qtyMatch) {
-                name = qtyMatch[1].trim();
-              }
-              if (name.toLowerCase() === itemQuery) {
+              const parsed = parseItemQty(trimmed);
+              if (parsed.name.toLowerCase() === itemQuery) {
                 isMatch = true;
               }
             });
@@ -370,16 +412,20 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
           r.name,
           r.isSubItem ? 'ตัวเลือกเสริม/ชุด' : 'จานหลัก',
           r.qty,
-          r.isSubItem ? 0 : r.revenue
-        ])
+          r.revenue
+        ]),
+        ...(menuAdjustment !== 0 ? [
+          ['—', 'ส่วนต่าง (ส่วนลด / ภาษี / Service Charge)', 'ปรับปรุงยอด', '—', menuAdjustment]
+        ] : []),
+        ['—', 'รวมยอดขายสุทธิ (Grand Total)', '—', '—', totalSales]
       ];
       downloadExcelCSV(headers, rows, `สรุปยอดขาย_${from}_ถึง_${to}`);
     } else if (view === 'drilldown') {
       const headers = ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'ยอดรวมบิล (บาท)', 'จำนวนที่สั่งในบิล', 'รายละเอียดรายการทั้งหมดในบิล'];
       const rows = drilldownBills.map(bill => {
-        const matchingQty = bill.matchingItems.length;
+        const matchingQty = bill.matchingItems.reduce((sum, item) => sum + (item.qty || 1), 0);
         const itemsText = bill.items.map(it => {
-          let text = `${it.name} (x1) - ฿${it.price}`;
+          let text = `${it.name} (x${it.qty || 1}) - ฿${it.price}`;
           if (it.subItems && it.subItems.length > 0) {
             text += ` [ตัวเลือก: ${it.subItems.map(sub => sub.replace(/^↳/, '').trim()).join('; ')}]`;
           }
@@ -411,7 +457,7 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
         }
         
         const itemsText = bill.items.map(it => {
-          let text = `${it.name} (x1) - ฿${it.price}`;
+          let text = `${it.name} (x${it.qty || 1}) - ฿${it.price}`;
           if (it.subItems && it.subItems.length > 0) {
             text += ` [ตัวเลือก: ${it.subItems.map(sub => sub.replace(/^↳/, '').trim()).join('; ')}]`;
           }
@@ -630,12 +676,34 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
                                 {r.qty} {lang === 'th' ? 'รายการ' : 'qty'}
                                 <ChevronRight size={12} style={{ opacity: 0.5 }} />
                               </span>
-                              <span style={{ color: r.isSubItem ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', minWidth: '60px', textAlign: 'right', fontSize: '0.82rem' }}>
-                                {r.isSubItem ? '—' : `฿${fmt(r.revenue)}`}
+                              <span style={{ color: r.revenue === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', minWidth: '60px', textAlign: 'right', fontSize: '0.82rem' }}>
+                                {r.revenue === 0 ? '—' : `฿${fmt(r.revenue)}`}
                               </span>
                             </div>
                           </div>
                         ))}
+                        
+                        {menuAdjustment !== 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', alignItems: 'center', padding: '0.35rem 0.4rem', borderTop: '1px dashed rgba(255,255,255,0.08)', marginTop: '4px' }}>
+                            <div style={{ display: 'flex', gap: '6px', minWidth: 0, alignItems: 'center' }}>
+                              <span style={{ color: 'rgba(255,255,255,0.3)', fontWeight: 'bold' }}>—</span>
+                              <span style={{ color: 'rgba(255,255,255,0.45)', fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                ส่วนต่าง (ส่วนลด / ภาษี / Service Charge)
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '14px', flexShrink: 0, alignItems: 'center' }}>
+                              <span style={{ color: 'rgba(255,255,255,0.3)', minWidth: '60px', textAlign: 'right' }}>—</span>
+                              <span style={{ color: menuAdjustment > 0 ? '#4ade80' : '#f87171', fontWeight: 700, minWidth: '60px', textAlign: 'right' }}>
+                                {menuAdjustment > 0 ? '+' : ''}฿{fmt(menuAdjustment)}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', alignItems: 'center', padding: '0.45rem 0.4rem 0.25rem', borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: '4px', fontWeight: 'bold' }}>
+                          <span style={{ color: 'white' }}>รวมยอดขายสุทธิ (Grand Total)</span>
+                          <span style={{ color: '#fbbf24', fontSize: '0.9rem' }}>฿{fmt(totalSales)}</span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -732,7 +800,9 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
                               {bill.items.map((item, idx) => (
                                 <div key={idx} style={{ fontSize: '0.8rem' }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ color: 'white', fontWeight: 500 }}>{item.name}</span>
+                                    <span style={{ color: 'white', fontWeight: 500 }}>
+                                      {item.qty > 1 ? `${item.name} (x${item.qty})` : item.name}
+                                    </span>
                                     <span style={{ color: 'rgba(255,255,255,0.6)' }}>฿{fmt(item.price)}</span>
                                   </div>
                                   {item.subItems && item.subItems.length > 0 && (

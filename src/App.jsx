@@ -620,18 +620,19 @@ function App() {
     const rowsToSend = [];
     checkoutItems.forEach(item => {
       const qty = Number(item.Quantity) || 1;
-      const qtyText = qty > 1 ? ` (x${qty})` : '';
       const price = (Number(item.ItemPrice) || 0) * qty;
       rowsToSend.push([
         timestamp, newOrderNumber, customerName, address,
-        item.ItemName + qtyText, 'ทานที่ร้าน', price,
-        finalTotal, 'Completed', timestamp, timestamp, currentUser ? currentUser.username : ''
+        item.ItemName, 'ทานที่ร้าน', price,
+        finalTotal, 'Completed', timestamp, timestamp, currentUser ? currentUser.username : '',
+        qty
       ]);
       if (item.Options) {
         rowsToSend.push([
           timestamp, newOrderNumber, customerName, address,
           `↳ ${item.Options}`, 'ทานที่ร้าน', 0,
-          finalTotal, 'Completed', timestamp, timestamp, currentUser ? currentUser.username : ''
+          finalTotal, 'Completed', timestamp, timestamp, currentUser ? currentUser.username : '',
+          ""
         ]);
       }
     });

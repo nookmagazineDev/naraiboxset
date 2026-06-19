@@ -34,6 +34,21 @@ const dayStr = (ts) => {
   catch { return String(ts); }
 };
 
+const parseItemQty = (detail) => {
+  const s = String(detail).trim();
+  let qty = 1;
+  let name = s;
+  
+  const match = s.match(/(.*?)\s*[\(\[]\s*x?\s*(\d+)\s*[\)\]]$/i) ||
+                s.match(/(.*?)\s*[xX*×]\s*(\d+)$/);
+                
+  if (match) {
+    name = match[1].trim();
+    qty = parseInt(match[2], 10) || 1;
+  }
+  return { name, qty };
+};
+
 // ─── CSV export helper (ไม่ต้องใช้ library — Excel เปิดได้) ─
 const esc = (v) => {
   const s = String(v ?? '');
@@ -170,12 +185,22 @@ export default function Reports({ allMenu = [] }) {
         // Main item
         const detail = String(r.ItemDetail).trim();
         let qty = 1;
-        let name = detail;
-        const match = detail.match(/(.*?)\s*\(x(\d+)\)$/);
-        if (match) {
-          name = match[1].trim();
-          qty = parseInt(match[2], 10) || 1;
+        
+        // 1. Check from r.Quantity
+        if (r.Quantity !== undefined && r.Quantity !== null && String(r.Quantity).trim() !== '') {
+          const parsedQty = parseInt(r.Quantity, 10);
+          if (!isNaN(parsedQty) && parsedQty > 0) {
+            qty = parsedQty;
+          }
         }
+        
+        // 2. Parse from detail string for legacy
+        const parsed = parseItemQty(detail);
+        if (qty === 1 && parsed.qty > 1) {
+          qty = parsed.qty;
+        }
+        const name = parsed.name;
+        
         lastMainItemQty = qty;
 
         if (!menuMap[name]) menuMap[name] = { name: name, qty: 0, revenue: 0 };
@@ -194,14 +219,10 @@ export default function Reports({ allMenu = [] }) {
           if (['ทานที่ร้าน', 'กลับบ้าน', 'delivery', 'เดลิเวอรี่', 'dine-in', 'takeaway', 'dine in', 'take away'].includes(trimmed.toLowerCase())) return;
           if (priceNames.has(trimmed)) return;
           
-          // Parse name and quantity from subitem part, e.g. "ไข่ดาว ×2" or "ไข่ดาว x2"
-          let name = trimmed;
-          let subQty = 1;
-          const qtyMatch = trimmed.match(/(.*?)\s*[×xX]\s*(\d+)$/) || trimmed.match(/(.*?)\s*\(x(\d+)\)$/);
-          if (qtyMatch) {
-            name = qtyMatch[1].trim();
-            subQty = parseInt(qtyMatch[2], 10) || 1;
-          }
+          // Parse name and quantity from subitem part using parseItemQty
+          const parsed = parseItemQty(trimmed);
+          const name = parsed.name;
+          const subQty = parsed.qty;
           
           const totalSubQty = lastMainItemQty * subQty;
           
@@ -213,6 +234,8 @@ export default function Reports({ allMenu = [] }) {
   });
 
   const menuRows = Object.values(menuMap).sort((a, b) => b.qty - a.qty);
+  const totalMenuRevenue = menuRows.reduce((sum, r) => sum + (r.revenue || 0), 0);
+  const menuAdjustment = totalSales - totalMenuRevenue;
 
   // ─── Export handlers ─────────────────────────────────────
   const exportIncome = () => {
@@ -221,6 +244,10 @@ export default function Reports({ allMenu = [] }) {
   };
   const exportMenu = () => {
     const rows = menuRows.map((r, i) => [i + 1, r.name, r.qty, r.revenue]);
+    if (menuAdjustment !== 0) {
+      rows.push(['—', 'ส่วนต่าง (ส่วนลด / ภาษี / Service Charge)', '—', menuAdjustment]);
+    }
+    rows.push(['—', 'รวมยอดขายสุทธิ (Grand Total)', '—', totalSales]);
     exportXLSX([{ name: 'ยอดขายตามเมนู', headers: ['อันดับ','ชื่อเมนู','จำนวน (ครั้ง)','รายได้รวม (บาท)'], rows }], `ยอดขายตามเมนู_${from}_${to}`);
   };
   const exportHistory = () => {
@@ -242,7 +269,11 @@ export default function Reports({ allMenu = [] }) {
   const exportAll = () => {
     exportXLSX([
       { name: 'รายรับ-รายจ่าย',  headers: ['วันที่','รายรับรวม','เงินสด','โอน/QR','บัตร','อื่นๆ','จำนวนบิล'],            rows: incomeRows.map(r => [r.day, r.total, r.cash, r.transfer, r.card, r.other, r.count]) },
-      { name: 'ยอดขายตามเมนู',    headers: ['อันดับ','ชื่อเมนู','จำนวน (ครั้ง)','รายได้รวม (บาท)'],                        rows: menuRows.map((r, i) => [i + 1, r.name, r.qty, r.revenue]) },
+      { name: 'ยอดขายตามเมนู',    headers: ['อันดับ','ชื่อเมนู','จำนวน (ครั้ง)','รายได้รวม (บาท)'],                        rows: [
+        ...menuRows.map((r, i) => [i + 1, r.name, r.qty, r.revenue]),
+        ...(menuAdjustment !== 0 ? [['—', 'ส่วนต่าง (ส่วนลด / ภาษี / Service Charge)', '—', menuAdjustment]] : []),
+        ['—', 'รวมยอดขายสุทธิ (Grand Total)', '—', totalSales]
+      ] },
       { name: 'ประวัติการขาย',     headers: ['วันเวลา','เลขบิล','โต๊ะ','ยอดรวม','ชำระด้วย','พนักงาน'],                      rows: completedOrders.map(o => [fmtD(o.timestamp), o.orderNumber, o.customerName, o.total, o.paymentMethod, o.staff]) },
       { name: 'ประวัติยกเลิก',     headers: ['วันเวลา','เลขบิล','โต๊ะ','ยอดรวม','พนักงาน'],                                 rows: cancelledOrders.map(o => [fmtD(o.Timestamp), o.OrderNumber, o.CustomerName, o.TotalAmount, o.RecordedBy || '—']) },
       { name: 'รายงานปิดกะ',       headers: ['รหัสกะ','สถานะ','เวลาเปิด','พนักงานเปิด','เวลาปิด','พนักงานปิด','เงินเปิดกะ','เงินปิดกะ','ยอดขายรวม','เงินสด','โอน/QR','บัตร','จำนวนบิล','ส่วนต่างเงินสด','หมายเหตุ'],
@@ -418,6 +449,22 @@ export default function Reports({ allMenu = [] }) {
                   <Td bold color="#a78bfa">฿{fmt(r.revenue)}</Td>
                 </tr>
               ))}
+              {menuAdjustment !== 0 && (
+                <tr style={{ background: 'rgba(255,255,255,0.02)' }}>
+                  <Td center muted>—</Td>
+                  <Td muted><em>ส่วนต่าง (ส่วนลด / ภาษี / Service Charge)</em></Td>
+                  <Td center muted>—</Td>
+                  <Td bold color={menuAdjustment > 0 ? '#22c55e' : '#dc2626'}>
+                    {menuAdjustment > 0 ? '+' : ''}฿{fmt(menuAdjustment)}
+                  </Td>
+                </tr>
+              )}
+              <tr style={{ background: 'rgba(167,139,250,0.06)', fontWeight: 'bold' }}>
+                <Td center>—</Td>
+                <Td color="#a78bfa">รวมยอดขายสุทธิ (Grand Total)</Td>
+                <Td center>—</Td>
+                <Td color="#a78bfa">฿{fmt(totalSales)}</Td>
+              </tr>
             </TableWrap>
           )}
 
