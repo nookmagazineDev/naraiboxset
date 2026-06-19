@@ -479,7 +479,7 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
       const headers = ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'ยอดรวมบิล (บาท)', 'ชื่อรายการอาหาร', 'จำนวน', 'ราคาต่อหน่วย (บาท)', 'ตัวเลือกเสริม/ของในเซ็ต'];
       const rows = [];
       drilldownBills.forEach(bill => {
-        bill.items.forEach(it => {
+        bill.matchingItems.forEach(it => {
           const subItemsText = (it.subItems && it.subItems.length > 0)
             ? it.subItems.map(sub => sub.replace(/^↳/, '').trim()).join(', ')
             : '—';
