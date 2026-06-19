@@ -318,6 +318,61 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
     return results;
   }, [bills, drilldownItem]);
 
+  const drilldownSummary = useMemo(() => {
+    if (!drilldownItem) return null;
+    const query = drilldownItem.toLowerCase().trim();
+    
+    let standalonePaidQty = 0;
+    let standaloneFreeQty = 0;
+    const popupMap = {}; // mainItemName -> qty
+    
+    drilldownBills.forEach(bill => {
+      bill.matchingItems.forEach(item => {
+        const itemCleanName = item.name.toLowerCase().trim();
+        
+        // 1. Standalone match
+        if (itemCleanName === query) {
+          if (item.price > 0) {
+            standalonePaidQty += item.qty;
+          } else {
+            standaloneFreeQty += item.qty;
+          }
+        }
+        
+        // 2. Sub-items match
+        if (item.subItems && item.subItems.length > 0) {
+          item.subItems.forEach(sub => {
+            const optionsText = sub.replace(/^↳/, '').trim();
+            const parts = optionsText.split(',');
+            parts.forEach(part => {
+              const trimmed = part.trim();
+              const parsed = parseItemQty(trimmed);
+              if (parsed.name.toLowerCase().trim() === query) {
+                const totalSubQty = item.qty * parsed.qty;
+                if (!popupMap[item.name]) {
+                  popupMap[item.name] = 0;
+                }
+                popupMap[item.name] += totalSubQty;
+              }
+            });
+          });
+        }
+      });
+    });
+    
+    const popupList = Object.entries(popupMap).map(([mainName, qty]) => ({
+      mainName,
+      qty
+    })).sort((a, b) => b.qty - a.qty);
+    
+    return {
+      standalonePaidQty,
+      standaloneFreeQty,
+      popupList,
+      totalPopupQty: popupList.reduce((sum, p) => sum + p.qty, 0)
+    };
+  }, [drilldownBills, drilldownItem]);
+
   const handleMenuDrilldown = (itemName) => {
     setDrilldownItem(itemName);
     setView('drilldown');
@@ -865,8 +920,68 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
                     <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white' }}>{drilldownItem}</span>
                   </div>
 
+                  {/* Summary card */}
+                  {drilldownSummary && (
+                    <div style={{ ...cardStyle, background: 'rgba(255,255,255,0.02)', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', fontWeight: 700, borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.4rem' }}>
+                        📊 สรุปสถิติการสั่งซื้อ
+                      </span>
+                      
+                      {/* Standalone Paid */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                        <span style={{ color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#4ade80' }}></span>
+                          จานเดี่ยวที่คิดราคา
+                        </span>
+                        <strong style={{ color: '#4ade80' }}>{drilldownSummary.standalonePaidQty} จาน</strong>
+                      </div>
+
+                      {/* Standalone Free */}
+                      {drilldownSummary.standaloneFreeQty > 0 && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                          <span style={{ color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.4)' }}></span>
+                            จานเดี่ยวโปรโมชั่น (ฟรี)
+                          </span>
+                          <strong style={{ color: 'rgba(255,255,255,0.6)' }}>{drilldownSummary.standaloneFreeQty} จาน</strong>
+                        </div>
+                      )}
+
+                      {/* Sub-items in Popup/Combo */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', borderTop: '1px dashed rgba(255,255,255,0.06)', paddingTop: '0.6rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.85rem' }}>
+                          <span style={{ color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#c084fc' }}></span>
+                            รายการที่เลือกในชุด/ป๊อปอัป
+                          </span>
+                          <strong style={{ color: '#c084fc' }}>{drilldownSummary.totalPopupQty} จาน</strong>
+                        </div>
+
+                        {/* Popup Breakdown */}
+                        {drilldownSummary.popupList.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingLeft: '14px', marginTop: '2px', fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)' }}>
+                            {drilldownSummary.popupList.map((item, pidx) => (
+                              <div key={pidx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+                                <span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                                  • อยู่ใน {item.mainName}
+                                </span>
+                                <span style={{ fontWeight: 700, color: '#c084fc', flexShrink: 0 }}>
+                                  {item.qty} จาน
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div style={{ paddingLeft: '14px', fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
+                            ไม่มีรายการในชุดหรือป๊อปอัพ
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Scrollable Drilldown list */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '430px', overflowY: 'auto', paddingRight: '2px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '260px', overflowY: 'auto', paddingRight: '2px' }}>
                     {drilldownBills.length === 0 ? (
                       <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', padding: '2rem', fontSize: '0.85rem' }}>
                         {lang === 'th' ? 'ไม่พบข้อมูลออเดอร์' : 'No matching orders found'}
