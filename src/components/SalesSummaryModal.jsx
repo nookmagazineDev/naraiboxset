@@ -48,8 +48,9 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
   const [error, setError] = useState('');
   
   // Navigation States
-  const [view, setView] = useState('summary'); // 'summary' | 'bills'
+  const [view, setView] = useState('summary'); // 'summary' | 'bills' | 'drilldown'
   const [searchQuery, setSearchQuery] = useState('');
+  const [drilldownItem, setDrilldownItem] = useState(null);
 
   const loadReport = useCallback(async (fromDate = from, toDate = to) => {
     setLoading(true);
@@ -225,6 +226,61 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
     );
   }, [bills, searchQuery]);
 
+  // Filter bills for a specific menu item drilldown
+  const drilldownBills = useMemo(() => {
+    if (!drilldownItem) return [];
+    const itemQuery = drilldownItem.toLowerCase().trim();
+    
+    const results = [];
+    bills.forEach(bill => {
+      const matchingItems = [];
+      bill.items.forEach(item => {
+        let isMatch = false;
+        
+        // 1. Check if main item name matches
+        if (item.name.toLowerCase().includes(itemQuery)) {
+          isMatch = true;
+        }
+        
+        // 2. Check if any sub-item option matches
+        if (item.subItems && item.subItems.length > 0) {
+          item.subItems.forEach(sub => {
+            const optionsText = sub.replace(/^↳/, '').trim();
+            const parts = optionsText.split(',');
+            parts.forEach(part => {
+              const trimmed = part.trim();
+              let name = trimmed;
+              const qtyMatch = trimmed.match(/(.*?)\s*[×xX]\s*(\d+)$/) || trimmed.match(/(.*?)\s*\(x(\d+)\)$/);
+              if (qtyMatch) {
+                name = qtyMatch[1].trim();
+              }
+              if (name.toLowerCase() === itemQuery) {
+                isMatch = true;
+              }
+            });
+          });
+        }
+        
+        if (isMatch) {
+          matchingItems.push(item);
+        }
+      });
+      
+      if (matchingItems.length > 0) {
+        results.push({
+          ...bill,
+          matchingItems
+        });
+      }
+    });
+    return results;
+  }, [bills, drilldownItem]);
+
+  const handleMenuDrilldown = (itemName) => {
+    setDrilldownItem(itemName);
+    setView('drilldown');
+  };
+
   // Date range presets helpers
   const applyPreset = (preset) => {
     let fStr = todayStr;
@@ -318,6 +374,29 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
         ])
       ];
       downloadExcelCSV(headers, rows, `สรุปยอดขาย_${from}_ถึง_${to}`);
+    } else if (view === 'drilldown') {
+      const headers = ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'ยอดรวมบิล (บาท)', 'จำนวนที่สั่งในบิล', 'รายละเอียดรายการทั้งหมดในบิล'];
+      const rows = drilldownBills.map(bill => {
+        const matchingQty = bill.matchingItems.length;
+        const itemsText = bill.items.map(it => {
+          let text = `${it.name} (x1) - ฿${it.price}`;
+          if (it.subItems && it.subItems.length > 0) {
+            text += ` [ตัวเลือก: ${it.subItems.map(sub => sub.replace(/^↳/, '').trim()).join('; ')}]`;
+          }
+          return text;
+        }).join(' | ');
+
+        return [
+          bill.orderNumber,
+          bill.customerName,
+          formatTimeThai(bill.timestamp),
+          bill.paymentMethod,
+          bill.total,
+          matchingQty,
+          itemsText
+        ];
+      });
+      downloadExcelCSV(headers, rows, `ประวัติออเดอร์_${drilldownItem}_${from}_ถึง_${to}`);
     } else {
       const headers = ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'รายละเอียดการชำระเงิน', 'ยอดรวม (บาท)', 'รายการอาหาร'];
       const rows = filteredBills.map(bill => {
@@ -531,7 +610,13 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem', maxHeight: '220px', overflowY: 'auto', paddingRight: '4px' }}>
                         {menuRows.map((r, i) => (
-                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', alignItems: 'center' }}>
+                          <div 
+                            key={i} 
+                            onClick={() => handleMenuDrilldown(r.name)}
+                            style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', alignItems: 'center', padding: '0.25rem 0.4rem', borderRadius: '6px', cursor: 'pointer', transition: 'all 0.15s' }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                          >
                             <div style={{ display: 'flex', gap: '6px', minWidth: 0, alignItems: 'center' }}>
                               <span style={{ color: 'rgba(255,255,255,0.3)', fontWeight: 'bold', minWidth: '16px' }}>{i + 1}.</span>
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: r.isSubItem ? 'rgba(255,255,255,0.55)' : 'white' }}>
@@ -541,7 +626,10 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
                               </span>
                             </div>
                             <div style={{ display: 'flex', gap: '14px', flexShrink: 0, alignItems: 'center' }}>
-                              <span style={{ color: '#fbbf24', fontWeight: 700 }}>{r.qty} {lang === 'th' ? 'รายการ' : 'qty'}</span>
+                              <span style={{ color: '#fbbf24', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                {r.qty} {lang === 'th' ? 'รายการ' : 'qty'}
+                                <ChevronRight size={12} style={{ opacity: 0.5 }} />
+                              </span>
                               <span style={{ color: r.isSubItem ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', minWidth: '60px', textAlign: 'right', fontSize: '0.82rem' }}>
                                 {r.isSubItem ? '—' : `฿${fmt(r.revenue)}`}
                               </span>
@@ -678,6 +766,102 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
                           </div>
                         );
                       })
+                    )}
+                  </div>
+
+                </div>
+              )}
+
+              {/* VIEW 3: MENU DRILLDOWN LIST */}
+              {view === 'drilldown' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  
+                  {/* Back button & Title */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                    <button 
+                      onClick={() => setView('summary')}
+                      style={{ background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '8px', color: 'white', padding: '0.4rem 0.6rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem' }}
+                    >
+                      <ArrowLeft size={14} /> {lang === 'th' ? 'ย้อนกลับ' : 'Back'}
+                    </button>
+                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.85rem', marginLeft: 'auto' }}>
+                      ออกไปทั้งหมด {drilldownBills.reduce((acc, b) => acc + b.matchingItems.length, 0)} ครั้ง
+                    </span>
+                  </div>
+
+                  {/* Title of selected menu item */}
+                  <div style={{ ...cardStyle, background: 'rgba(192,132,252,0.04)', border: '1px solid rgba(192,132,252,0.15)', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontSize: '0.75rem', color: '#c084fc', fontWeight: 700 }}>🔍 รายละเอียดประวัติการสั่งซื้อ</span>
+                    <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'white' }}>{drilldownItem}</span>
+                  </div>
+
+                  {/* Scrollable Drilldown list */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '430px', overflowY: 'auto', paddingRight: '2px' }}>
+                    {drilldownBills.length === 0 ? (
+                      <div style={{ textAlign: 'center', color: 'rgba(255,255,255,0.3)', padding: '2rem', fontSize: '0.85rem' }}>
+                        {lang === 'th' ? 'ไม่พบข้อมูลออเดอร์' : 'No matching orders found'}
+                      </div>
+                    ) : (
+                      drilldownBills.map((bill, bidx) => (
+                        <div key={bidx} style={{ background: '#16162a', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                          
+                          {/* Order header info */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: 800, color: '#c084fc', fontSize: '0.9rem' }}>{bill.orderNumber}</span>
+                              <span style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '6px', padding: '0.15rem 0.45rem', fontSize: '0.75rem', fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>
+                                {bill.customerName}
+                              </span>
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', fontWeight: 500 }}>
+                              ⏰ {formatTimeThai(bill.timestamp)}
+                            </span>
+                          </div>
+
+                          {/* The matching main item + options (what was inside the set) */}
+                          <div style={{ background: 'rgba(0,0,0,0.18)', borderRadius: '8px', padding: '0.6rem 0.8rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {bill.matchingItems.map((item, midx) => (
+                              <div key={midx} style={{ fontSize: '0.82rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px dashed rgba(255,255,255,0.05)', paddingBottom: '4px', marginBottom: '4px' }}>
+                                  <span style={{ color: 'white', fontWeight: 600 }}>📦 {item.name}</span>
+                                  <span style={{ color: '#fbbf24', fontWeight: 700 }}>฿{fmt(item.price)}</span>
+                                </div>
+                                {item.subItems && item.subItems.length > 0 ? (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', color: 'rgba(192,132,252,0.85)', paddingLeft: '0.5rem' }}>
+                                    <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)', fontWeight: 600, marginBottom: '2px' }}>📋 รายการประกอบข้างในเซ็ต:</div>
+                                    {item.subItems.map((sub, sidx) => {
+                                      const options = sub.replace(/^↳/, '').split(',').map(o => o.trim());
+                                      return (
+                                        <div key={sidx} style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '4px' }}>
+                                          {options.map((opt, oidx) => (
+                                            <div key={oidx} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                              <span style={{ color: '#c084fc' }}>↳</span>
+                                              <span style={{ color: opt.toLowerCase().includes(drilldownItem.toLowerCase()) ? '#fbbf24' : 'rgba(255,255,255,0.7)', fontWeight: opt.toLowerCase().includes(drilldownItem.toLowerCase()) ? 700 : 400 }}>
+                                                {opt}
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic', paddingLeft: '0.5rem' }}>
+                                    (ไม่มีตัวเลือกเสริมหรือชุดย่อยย่อย)
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Payment summary footer for this order */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', borderTop: '1px solid rgba(255,255,255,0.04)', paddingTop: '0.4rem' }}>
+                            <span>💳 ชำระผ่าน: {bill.paymentMethod}</span>
+                            <span style={{ color: 'white' }}>ยอดรวมบิล: <strong>฿{fmt(bill.total)}</strong></span>
+                          </div>
+
+                        </div>
+                      ))
                     )}
                   </div>
 
