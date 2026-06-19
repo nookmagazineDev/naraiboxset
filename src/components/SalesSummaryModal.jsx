@@ -223,17 +223,13 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
         
         lastMainItemQty = qty;
 
-        const rowPrice = Number(r.Price) || 0;
-        const freePrefix = lang === 'th' ? 'ฟรี ' : 'Free ';
-        const displayName = rowPrice > 0 ? name : (freePrefix + name);
-
-        if (!menuMap[displayName]) {
-          menuMap[displayName] = { name: displayName, qty: 0, revenue: 0, isSubItem: false };
+        if (!menuMap[name]) {
+          menuMap[name] = { name, qty: 0, revenue: 0, isSubItem: false };
         } else {
-          menuMap[displayName].isSubItem = false;
+          menuMap[name].isSubItem = false;
         }
-        menuMap[displayName].qty += qty;
-        menuMap[displayName].revenue += rowPrice;
+        menuMap[name].qty += qty;
+        menuMap[name].revenue += Number(r.Price) || 0;
       } else {
         // Option/Popup sub-item
         const optionsText = String(r.ItemDetail).replace(/^↳/, '').trim();
@@ -253,11 +249,9 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
           const subQty = parsed.qty;
           
           const totalSubQty = lastMainItemQty * subQty;
-          const freePrefix = lang === 'th' ? 'ฟรี ' : 'Free ';
-          const displayName = freePrefix + name;
           
-          if (!menuMap[displayName]) menuMap[displayName] = { name: displayName, qty: 0, revenue: 0, isSubItem: true };
-          menuMap[displayName].qty += totalSubQty;
+          if (!menuMap[name]) menuMap[name] = { name, qty: 0, revenue: 0, isSubItem: true };
+          menuMap[name].qty += totalSubQty;
         });
       }
     });
@@ -281,44 +275,32 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
   // Filter bills for a specific menu item drilldown
   const drilldownBills = useMemo(() => {
     if (!drilldownItem) return [];
-    
-    const freePrefix = lang === 'th' ? 'ฟรี ' : 'Free ';
-    const isFreeQuery = drilldownItem.startsWith(freePrefix);
-    const cleanQuery = isFreeQuery 
-      ? drilldownItem.substring(freePrefix.length).toLowerCase().trim()
-      : drilldownItem.toLowerCase().trim();
+    const itemQuery = drilldownItem.toLowerCase().trim();
     
     const results = [];
     bills.forEach(bill => {
       const matchingItems = [];
       bill.items.forEach(item => {
         let isMatch = false;
-        const itemCleanName = item.name.toLowerCase().trim();
         
-        if (isFreeQuery) {
-          // 1. Matches if it is a free main item (name matches and price is 0)
-          if (itemCleanName.includes(cleanQuery) && item.price === 0) {
-            isMatch = true;
-          }
-          // 2. Or matches if any sub-item option name matches
-          if (item.subItems && item.subItems.length > 0) {
-            item.subItems.forEach(sub => {
-              const optionsText = sub.replace(/^↳/, '').trim();
-              const parts = optionsText.split(',');
-              parts.forEach(part => {
-                const trimmed = part.trim();
-                const parsed = parseItemQty(trimmed);
-                if (parsed.name.toLowerCase().trim() === cleanQuery) {
-                  isMatch = true;
-                }
-              });
+        // 1. Check if main item name matches
+        if (item.name.toLowerCase().includes(itemQuery)) {
+          isMatch = true;
+        }
+        
+        // 2. Check if any sub-item option matches
+        if (item.subItems && item.subItems.length > 0) {
+          item.subItems.forEach(sub => {
+            const optionsText = sub.replace(/^↳/, '').trim();
+            const parts = optionsText.split(',');
+            parts.forEach(part => {
+              const trimmed = part.trim();
+              const parsed = parseItemQty(trimmed);
+              if (parsed.name.toLowerCase() === itemQuery) {
+                isMatch = true;
+              }
             });
-          }
-        } else {
-          // Paid query: matches if main item name matches and price > 0
-          if (itemCleanName.includes(cleanQuery) && item.price > 0) {
-            isMatch = true;
-          }
+          });
         }
         
         if (isMatch) {
@@ -334,7 +316,7 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
       }
     });
     return results;
-  }, [bills, drilldownItem, lang]);
+  }, [bills, drilldownItem]);
 
   const handleMenuDrilldown = (itemName) => {
     setDrilldownItem(itemName);
@@ -921,21 +903,14 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
                                       const options = sub.replace(/^↳/, '').split(',').map(o => o.trim());
                                       return (
                                         <div key={sidx} style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '4px' }}>
-                                          {options.map((opt, oidx) => {
-                                            const freePrefix = lang === 'th' ? 'ฟรี ' : 'Free ';
-                                            const cleanQuery = drilldownItem.startsWith(freePrefix)
-                                              ? drilldownItem.substring(freePrefix.length).toLowerCase().trim()
-                                              : drilldownItem.toLowerCase().trim();
-                                            const isHighlight = opt.toLowerCase().includes(cleanQuery);
-                                            return (
-                                              <div key={oidx} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                <span style={{ color: '#c084fc' }}>↳</span>
-                                                <span style={{ color: isHighlight ? '#fbbf24' : 'rgba(255,255,255,0.7)', fontWeight: isHighlight ? 700 : 400 }}>
-                                                  {opt}
-                                                </span>
-                                              </div>
-                                            );
-                                          })}
+                                          {options.map((opt, oidx) => (
+                                            <div key={oidx} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                              <span style={{ color: '#c084fc' }}>↳</span>
+                                              <span style={{ color: opt.toLowerCase().includes(drilldownItem.toLowerCase()) ? '#fbbf24' : 'rgba(255,255,255,0.7)', fontWeight: opt.toLowerCase().includes(drilldownItem.toLowerCase()) ? 700 : 400 }}>
+                                                {opt}
+                                              </span>
+                                            </div>
+                                          ))}
                                         </div>
                                       );
                                     })}

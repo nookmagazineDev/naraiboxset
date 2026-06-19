@@ -203,16 +203,9 @@ export default function Reports({ allMenu = [] }) {
         
         lastMainItemQty = qty;
 
-        const rowPrice = Number(r.Price) || 0;
-        const displayName = rowPrice > 0 ? name : ('ฟรี ' + name);
-
-        if (!menuMap[displayName]) {
-          menuMap[displayName] = { name: displayName, qty: 0, revenue: 0, isSubItem: false };
-        } else {
-          menuMap[displayName].isSubItem = false;
-        }
-        menuMap[displayName].qty += qty;
-        menuMap[displayName].revenue += rowPrice;
+        if (!menuMap[name]) menuMap[name] = { name: name, qty: 0, revenue: 0 };
+        menuMap[name].qty += qty;
+        menuMap[name].revenue += Number(r.Price) || 0;
       } else {
         // Option/Popup sub-item
         const optionsText = String(r.ItemDetail).replace(/^↳/, '').trim();
@@ -232,17 +225,16 @@ export default function Reports({ allMenu = [] }) {
           const subQty = parsed.qty;
           
           const totalSubQty = lastMainItemQty * subQty;
-          const displayName = 'ฟรี ' + name;
           
-          if (!menuMap[displayName]) menuMap[displayName] = { name: displayName, qty: 0, revenue: 0, isSubItem: true };
-          menuMap[displayName].qty += totalSubQty;
+          if (!menuMap[name]) menuMap[name] = { name: name, qty: 0, revenue: 0 };
+          menuMap[name].qty += totalSubQty;
         });
       }
     });
   });
 
   const menuRows = Object.values(menuMap).sort((a, b) => b.qty - a.qty);
-  const totalMenuRevenue = menuRows.reduce((sum, r) => sum + (r.isSubItem ? 0 : r.revenue), 0);
+  const totalMenuRevenue = menuRows.reduce((sum, r) => sum + (r.revenue || 0), 0);
   const menuAdjustment = totalSales - totalMenuRevenue;
 
   // ─── Export handlers ─────────────────────────────────────
