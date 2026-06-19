@@ -447,10 +447,77 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
     URL.revokeObjectURL(url);
   };
 
+  const downloadExcelMultiSheet = (sheets, filename) => {
+    let xml = '<?xml version="1.0" encoding="utf-8"?>\r\n' +
+      '<?mso-application progid="Excel.Sheet"?>\r\n' +
+      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\r\n' +
+      ' xmlns:o="urn:schemas-microsoft-com:office:office"\r\n' +
+      ' xmlns:x="urn:schemas-microsoft-com:office:excel"\r\n' +
+      ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"\r\n' +
+      ' xmlns:html="http://www.w3.org/TR/REC-html40">\r\n' +
+      ' <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">\r\n' +
+      '  <Author>NaraiBoxset</Author>\r\n' +
+      ' </DocumentProperties>\r\n' +
+      ' <Styles>\r\n' +
+      '  <Style ss:ID="Default" ss:Name="Normal">\r\n' +
+      '   <Alignment ss:Vertical="Bottom"/>\r\n' +
+      '   <Borders/>\r\n' +
+      '   <Font ss:FontName="Calibri" x:CharSet="222" ss:Size="11" ss:Color="#000000"/>\r\n' +
+      '   <Interior/>\r\n' +
+      '   <NumberFormat/>\r\n' +
+      '   <Protection/>\r\n' +
+      '  </Style>\r\n' +
+      '  <Style ss:ID="Header">\r\n' +
+      '   <Font ss:FontName="Calibri" ss:Bold="1" ss:Color="#000000"/>\r\n' +
+      '  </Style>\r\n' +
+      ' </Styles>\r\n';
+
+    sheets.forEach(sheet => {
+      xml += ` <Worksheet ss:Name="${sheet.name}">\r\n` +
+        '  <Table>\r\n';
+      
+      // Write headers
+      if (sheet.headers && sheet.headers.length > 0) {
+        xml += '   <Row ss:StyleID="Header">\r\n';
+        sheet.headers.forEach(h => {
+          const clean = String(h ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+          xml += `    <Cell><Data ss:Type="String">${clean}</Data></Cell>\r\n`;
+        });
+        xml += '   </Row>\r\n';
+      }
+
+      // Write rows
+      sheet.rows.forEach(row => {
+        xml += '   <Row>\r\n';
+        row.forEach(cell => {
+          const val = cell ?? '';
+          const isNum = typeof val === 'number' && !isNaN(val);
+          const clean = String(val).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+          xml += `    <Cell><Data ss:Type="${isNum ? 'Number' : 'String'}">${clean}</Data></Cell>\r\n`;
+        });
+        xml += '   </Row>\r\n';
+      });
+
+      xml += '  </Table>\r\n' +
+        ' </Worksheet>\r\n';
+    });
+
+    xml += '</Workbook>\r\n';
+
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${filename}.xls`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportExcel = () => {
     if (view === 'summary') {
-      const headers = ['หัวข้อ', 'รายละเอียด', '', '', ''];
-      const rows = [
+      const summaryRows = [
         ['สรุปยอดขาย NaraiBoxset', ''],
         ['ช่วงวันที่เริ่มต้น', from],
         ['ช่วงวันที่สิ้นสุด', to],
@@ -474,7 +541,43 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
         ] : []),
         ['—', 'รวมยอดขายสุทธิ (Grand Total)', '—', '—', totalSales]
       ];
-      downloadExcelCSV(headers, rows, `สรุปยอดขาย_${from}_ถึง_${to}`);
+
+      const detailRows = [];
+      filteredBills.forEach(bill => {
+        let splitLabel = '';
+        if (bill.splitDetail) {
+          const sd = bill.splitDetail;
+          const parts = [];
+          if (sd.cash > 0) parts.push(`สด ฿${sd.cash}`);
+          if (sd.transfer > 0) parts.push(`โอน ฿${sd.transfer}`);
+          if (sd.card > 0) parts.push(`บัตร ฿${sd.card}`);
+          splitLabel = parts.join(', ');
+        }
+
+        bill.items.forEach(it => {
+          const subItemsText = (it.subItems && it.subItems.length > 0)
+            ? it.subItems.map(sub => sub.replace(/^↳/, '').trim()).join(', ')
+            : '—';
+          
+          detailRows.push([
+            bill.orderNumber,
+            bill.customerName,
+            formatTimeThai(bill.timestamp),
+            bill.paymentMethod,
+            splitLabel || '—',
+            bill.total,
+            it.name,
+            it.qty || 1,
+            it.price || 0,
+            subItemsText
+          ]);
+        });
+      });
+
+      downloadExcelMultiSheet([
+        { name: 'หน้ารวม', headers: ['หัวข้อ', 'รายละเอียด', '', '', ''], rows: summaryRows },
+        { name: 'รายละเอียดบิล', headers: ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'รายละเอียดการชำระเงิน', 'ยอดรวมบิล (บาท)', 'ชื่อรายการอาหาร', 'จำนวน', 'ราคาต่อหน่วย (บาท)', 'ตัวเลือกเสริม/ของในเซ็ต'], rows: detailRows }
+      ], `สรุปยอดขาย_${from}_ถึง_${to}`);
     } else if (view === 'drilldown') {
       const headers = ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'ยอดรวมบิล (บาท)', 'ชื่อรายการอาหาร', 'จำนวน', 'ราคาต่อหน่วย (บาท)', 'ตัวเลือกเสริม/ของในเซ็ต'];
       const rows = [];
