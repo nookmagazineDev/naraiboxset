@@ -476,26 +476,26 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
       ];
       downloadExcelCSV(headers, rows, `สรุปยอดขาย_${from}_ถึง_${to}`);
     } else if (view === 'drilldown') {
-      const headers = ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'ยอดรวมบิล (บาท)', 'จำนวนที่สั่งในบิล', 'รายละเอียดรายการทั้งหมดในบิล'];
-      const rows = drilldownBills.map(bill => {
-        const matchingQty = bill.matchingItems.reduce((sum, item) => sum + (item.qty || 1), 0);
-        const itemsText = bill.items.map(it => {
-          let text = `${it.name} (x${it.qty || 1}) - ฿${it.price}`;
-          if (it.subItems && it.subItems.length > 0) {
-            text += ` [ตัวเลือก: ${it.subItems.map(sub => sub.replace(/^↳/, '').trim()).join('; ')}]`;
-          }
-          return text;
-        }).join(' | ');
-
-        return [
-          bill.orderNumber,
-          bill.customerName,
-          formatTimeThai(bill.timestamp),
-          bill.paymentMethod,
-          bill.total,
-          matchingQty,
-          itemsText
-        ];
+      const headers = ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'ยอดรวมบิล (บาท)', 'ชื่อรายการอาหาร', 'จำนวน', 'ราคาต่อหน่วย (บาท)', 'ตัวเลือกเสริม/ของในเซ็ต'];
+      const rows = [];
+      drilldownBills.forEach(bill => {
+        bill.items.forEach(it => {
+          const subItemsText = (it.subItems && it.subItems.length > 0)
+            ? it.subItems.map(sub => sub.replace(/^↳/, '').trim()).join(', ')
+            : '—';
+          
+          rows.push([
+            bill.orderNumber,
+            bill.customerName,
+            formatTimeThai(bill.timestamp),
+            bill.paymentMethod,
+            bill.total,
+            it.name,
+            it.qty || 1,
+            it.price || 0,
+            subItemsText
+          ]);
+        });
       });
       downloadExcelCSV(headers, rows, `ประวัติออเดอร์_${drilldownItem}_${from}_ถึง_${to}`);
     } else {
