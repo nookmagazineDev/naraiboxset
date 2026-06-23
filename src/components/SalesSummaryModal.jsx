@@ -148,7 +148,7 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
           total: Number(r.TotalAmount) || 0,
           timestamp: r.Timestamp,
           status: r.Status,
-          paymentMethod: payMap[r.OrderNumber]?.paymentMethod || '—',
+          paymentMethod: payMap[r.OrderNumber]?.paymentMethod || 'ไม่ระบุ',
           splitDetail: payMap[r.OrderNumber]?.splitDetail || null,
           items: []
         };

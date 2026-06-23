@@ -333,6 +333,13 @@ function doPost(e) {
     if (postData.rows && Array.isArray(postData.rows)) {
       postData.rows.forEach(function(row) { sheet.appendRow(row); });
     }
+    // บันทึกข้อมูลการชำระเงินในคำขอเดียวกัน (atomic) — กันกรณีบิลถูกบันทึกแต่ payment หาย
+    if (postData.payment) {
+      var pay = postData.payment;
+      var paySh = getOrCreateSheet(ss, 'PaymentSummary', ['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail']);
+      paySh.getRange(1, 1, 1, 8).setValues([['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail']]);
+      paySh.appendRow([new Date().toISOString(), pay.orderNumber||'', pay.tableNo||'', pay.paymentMethod||'', Number(pay.grandTotal)||0, pay.staff||'', pay.shiftId||'', pay.splitDetail||'']);
+    }
     return _bomJson({ success: true });
   }
 

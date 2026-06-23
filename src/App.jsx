@@ -663,12 +663,24 @@ function App() {
     navigate('/index');
 
     try {
-      // Save to Orders sheet
+      // Save to Orders sheet + payment record ในคำขอเดียว (atomic) — กันบิลขึ้นแต่ payment หาย
       await fetch(GAS_URL, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'insertOrder', rows: rowsToSend })
+        body: JSON.stringify({
+          action: 'insertOrder',
+          rows: rowsToSend,
+          payment: {
+            orderNumber: newOrderNumber,
+            tableNo: String(tableNumber),
+            paymentMethod,
+            grandTotal: finalTotal,
+            staff: currentUser?.username || '',
+            shiftId: currentShift?.id || '',
+            splitDetail: paymentDetails ? JSON.stringify(paymentDetails) : ''
+          }
+        })
       });
     } catch (error) {
       console.error('Error saving order:', error);
@@ -685,14 +697,6 @@ function App() {
     } catch (error) {
       console.error('Error clearing table orders:', error);
     }
-
-    try {
-      // Save payment record for reports
-      await fetch(GAS_URL, {
-        method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'savePaymentRecord', orderNumber: newOrderNumber, tableNo: String(tableNumber), paymentMethod, grandTotal: finalTotal, staff: currentUser?.username || '', shiftId: currentShift?.id || '', splitDetail: paymentDetails ? JSON.stringify(paymentDetails) : '' })
-      });
-    } catch (error) { console.error('Error saving payment record:', error); }
 
     try {
       // Deduct stock based on BOM
