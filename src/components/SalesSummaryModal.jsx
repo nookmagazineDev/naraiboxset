@@ -47,7 +47,7 @@ const parseItemQty = (detail) => {
   return { name, qty };
 };
 
-const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], onClose }) => {
+const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], categories = [], onClose }) => {
   const todayStr = getThaiTodayStr();
   
   // Date States
@@ -100,6 +100,33 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
     });
     return set;
   }, [allMenu]);
+
+  // map ชื่อเมนู (และชื่ออังกฤษ) → ตัวเมนู เพื่อหาหมวดของแต่ละรายการตอน export
+  const menuByName = useMemo(() => {
+    const m = {};
+    (allMenu || []).forEach(item => {
+      if (item.name) m[String(item.name).trim().toLowerCase()] = item;
+      if (item.nameEn) m[String(item.nameEn).trim().toLowerCase()] = item;
+    });
+    return m;
+  }, [allMenu]);
+
+  // map slug หมวด → ชื่อหมวดที่อ่านได้
+  const catNameBySlug = useMemo(() => {
+    const m = {};
+    (categories || []).forEach(c => {
+      if (c.slug) m[c.slug] = (lang === 'th' ? c.name : c.nameEn) || c.name || c.slug;
+    });
+    return m;
+  }, [categories, lang]);
+
+  // หาชื่อหมวดของเมนูจากชื่อรายการ — ไม่เจอคืน '—'
+  const getMenuCategoryName = (name) => {
+    const item = menuByName[String(name).trim().toLowerCase()];
+    if (!item) return '—';
+    const slug = item.category || (Array.isArray(item.categories) ? item.categories[0] : '') || '';
+    return catNameBySlug[slug] || slug || '—';
+  };
 
   // Group Payments by orderNumber
   const payMap = useMemo(() => {
@@ -530,16 +557,16 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
         ['ยอดบัตรเครดิต (บาท)', totalCard],
         [],
         ['ยอดขายสะสมรายเมนู'],
-        ['อันดับ', 'ชื่อเมนู', 'ประเภท', 'จำนวนที่ขายได้', 'รายได้รวม (บาท)'],
+        ['อันดับ', 'ชื่อเมนู', 'หมวดหมู่', 'จำนวนที่ขายได้', 'รายได้รวม (บาท)'],
         ...menuRows.map((r, i) => [
           i + 1,
           r.name,
-          r.isSubItem ? 'ตัวเลือกเสริม/ชุด' : 'จานหลัก',
+          getMenuCategoryName(r.name),
           r.qty,
           r.revenue
         ]),
         ...(menuAdjustment !== 0 ? [
-          ['—', 'ส่วนต่าง (ส่วนลด / ภาษี / Service Charge)', 'ปรับปรุงยอด', '—', menuAdjustment]
+          ['—', 'ส่วนต่าง (ส่วนลด / ภาษี / Service Charge)', '—', '—', menuAdjustment]
         ] : []),
         ['—', 'รวมยอดขายสุทธิ (Grand Total)', '—', '—', totalSales]
       ];

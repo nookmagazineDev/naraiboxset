@@ -1127,6 +1127,7 @@ function App() {
             lang={lang}
             initialMode={salesSummaryMode}
             allMenu={allMenu}
+            categories={allCategories.length > 0 ? allCategories : categories}
             onClose={() => setShowSalesSummaryModal(false)}
           />
         </Suspense>
