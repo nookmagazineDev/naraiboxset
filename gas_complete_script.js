@@ -161,7 +161,9 @@ function doGet(e) {
     return _bomJson({
       success:  true,
       orders:   filterByDate(allOrders,   'Timestamp'),
-      payments: filterByDate(allPayments, 'timestamp'),
+      // ส่ง payments ทั้งหมด ไม่กรองตามวันของตัวมันเอง — ฝั่ง client จับคู่ด้วยเลขบิล (orderNumber)
+      // กันกรณีแก้/เพิ่ม payment ย้อนหลังคนละวันกับวันที่บิลถูกเปิด แล้วยอดไม่ตรงช่องทางจ่าย
+      payments: allPayments,
       shifts:   allShifts
     });
   }
@@ -673,7 +675,9 @@ function doPost(e) {
     var sh = getOrCreateSheet(ss, 'PaymentSummary', ['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail']);
     // migration: make sure the splitDetail header exists on older sheets
     sh.getRange(1, 1, 1, 8).setValues([['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail']]);
-    sh.appendRow([new Date().toISOString(), postData.orderNumber||'', postData.tableNo||'', postData.paymentMethod||'', Number(postData.grandTotal)||0, postData.staff||'', postData.shiftId||'', postData.splitDetail||'']);
+    // รับ timestamp ได้ (ใช้ตอน backfill บิลย้อนหลังให้ตรงวันเดิม) — ไม่ส่งมาก็ใช้เวลาปัจจุบัน
+    var payTs = postData.timestamp ? String(postData.timestamp) : new Date().toISOString();
+    sh.appendRow([payTs, postData.orderNumber||'', postData.tableNo||'', postData.paymentMethod||'', Number(postData.grandTotal)||0, postData.staff||'', postData.shiftId||'', postData.splitDetail||'']);
     return _bomJson({ success: true });
   }
 
