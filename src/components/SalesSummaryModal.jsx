@@ -581,15 +581,25 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
         { name: 'รายละเอียดบิล', headers: ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'รายละเอียดการชำระเงิน', 'ยอดรวมบิล (บาท)', 'ชื่อรายการอาหาร', 'จำนวน', 'ราคาต่อหน่วย (บาท)', 'ตัวเลือกเสริม/ของในเซ็ต'], rows: detailRows }
       ], `สรุปยอดขาย_${from}_ถึง_${to}`);
     } else if (view === 'drilldown') {
-      const headers = ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'ยอดรวมบิล (บาท)', 'ชื่อรายการอาหาร', 'จำนวน', 'ราคาต่อหน่วย (บาท)', 'ตัวเลือกเสริม/ของในเซ็ต'];
-      const rows = [];
+      // บล็อกสรุปสถิติ (ชุดข้อมูลเดียวกับการ์ด "สรุปสถิติการสั่งซื้อ") ไว้ด้านบนไฟล์
+      const s = drilldownSummary || { standalonePaidQty: 0, standaloneFreeQty: 0, popupList: [], totalPopupQty: 0 };
+      const statsRows = [
+        ['เมนู', drilldownItem],
+        ['จานเดี่ยวที่คิดราคา', s.standalonePaidQty, 'จาน'],
+        ...(s.standaloneFreeQty > 0 ? [['จานเดี่ยวโปรโมชั่น (ฟรี)', s.standaloneFreeQty, 'จาน']] : []),
+        ['รายการที่เลือกในชุด/ป๊อปอัป', s.totalPopupQty, 'จาน'],
+        ...s.popupList.map(p => [`   • อยู่ใน ${p.mainName}`, p.qty, 'จาน']),
+      ];
+
+      const detailHeader = ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'ยอดรวมบิล (บาท)', 'ชื่อรายการอาหาร', 'จำนวน', 'ราคาต่อหน่วย (บาท)', 'ตัวเลือกเสริม/ของในเซ็ต'];
+      const detailRows = [];
       drilldownBills.forEach(bill => {
         bill.matchingItems.forEach(it => {
           const subItemsText = (it.subItems && it.subItems.length > 0)
             ? it.subItems.map(sub => sub.replace(/^↳/, '').trim()).join(', ')
             : '—';
-          
-          rows.push([
+
+          detailRows.push([
             bill.orderNumber,
             bill.customerName,
             formatTimeThai(bill.timestamp),
@@ -602,7 +612,17 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
           ]);
         });
       });
-      downloadExcelCSV(headers, rows, `ประวัติออเดอร์_${drilldownItem}_${from}_ถึง_${to}`);
+
+      downloadExcelMultiSheet([{
+        name: 'ประวัติออเดอร์',
+        headers: ['📊 สรุปสถิติการสั่งซื้อ'],
+        rows: [
+          ...statsRows,
+          [],
+          detailHeader,
+          ...detailRows
+        ]
+      }], `ประวัติออเดอร์_${drilldownItem}_${from}_ถึง_${to}`);
     } else {
       const headers = ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'รายละเอียดการชำระเงิน', 'ยอดรวม (บาท)', 'รายการอาหาร'];
       const rows = filteredBills.map(bill => {
