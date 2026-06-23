@@ -37,7 +37,7 @@ const parseItemQty = (detail) => {
   let qty = 1;
   let name = s;
   
-  const match = s.match(/(.*?)\s*[\(\[]\s*x?\s*(\d+)\s*[\)\]]$/i) ||
+  const match = s.match(/(.*?)\s*[([]\s*x?\s*(\d+)\s*[)\]]$/i) ||
                 s.match(/(.*?)\s*[xX*×]\s*(\d+)$/);
                 
   if (match) {
@@ -165,30 +165,29 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   }, [data, payMap]);
 
-  // Calculations for Summary
-  let totalSales = 0;
-  let totalCash = 0;
-  let totalXfer = 0;
-  let totalCard = 0;
-  let totalBills = bills.length;
+  // Calculations for Summary — memoize ไว้ ไม่งั้นพิมพ์ค้นหา/สลับหน้าทีจะวนคำนวณใหม่ทั้งก้อนทุกครั้ง
+  const { totalSales, totalCash, totalXfer, totalCard, totalBills } = useMemo(() => {
+    let totalSales = 0, totalCash = 0, totalXfer = 0, totalCard = 0;
+    bills.forEach(o => {
+      totalSales += o.total;
+      const sd = o.splitDetail && typeof o.splitDetail === 'object' ? o.splitDetail : null;
+      if (sd) {
+        totalCash += Number(sd.cash) || 0;
+        totalXfer += Number(sd.transfer) || 0;
+        totalCard += Number(sd.card) || 0;
+      } else {
+        const m = (o.paymentMethod || '').toLowerCase();
+        if (m.includes('สด') || m === 'cash') totalCash += o.total;
+        else if (m.includes('โอน') || m.includes('qr') || m === 'transfer') totalXfer += o.total;
+        else if (m.includes('บัตร') || m === 'card') totalCard += o.total;
+        else totalCash += o.total;
+      }
+    });
+    return { totalSales, totalCash, totalXfer, totalCard, totalBills: bills.length };
+  }, [bills]);
 
-  bills.forEach(o => {
-    totalSales += o.total;
-    const sd = o.splitDetail && typeof o.splitDetail === 'object' ? o.splitDetail : null;
-    if (sd) {
-      totalCash += Number(sd.cash) || 0;
-      totalXfer += Number(sd.transfer) || 0;
-      totalCard += Number(sd.card) || 0;
-    } else {
-      const m = (o.paymentMethod || '').toLowerCase();
-      if (m.includes('สด') || m === 'cash') totalCash += o.total;
-      else if (m.includes('โอน') || m.includes('qr') || m === 'transfer') totalXfer += o.total;
-      else if (m.includes('บัตร') || m === 'card') totalCard += o.total;
-      else totalCash += o.total;
-    }
-  });
-
-  // Calculate Menu Breakdown including sub-items/popups
+  // Calculate Menu Breakdown including sub-items/popups — เป็นลูปหนักสุด (วนทุกแถวออเดอร์ x2) จึง memoize
+  const { menuRows, totalMenuRevenue } = useMemo(() => {
   const menuMap = {};
   const ordersGroupedByNum = {};
   (data?.orders || []).forEach(r => {
@@ -257,8 +256,11 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], o
     });
   });
 
-  const menuRows = Object.values(menuMap).sort((a, b) => b.qty - a.qty);
-  const totalMenuRevenue = menuRows.reduce((sum, r) => sum + (r.isSubItem ? 0 : r.revenue), 0);
+    const menuRows = Object.values(menuMap).sort((a, b) => b.qty - a.qty);
+    const totalMenuRevenue = menuRows.reduce((sum, r) => sum + (r.isSubItem ? 0 : r.revenue), 0);
+    return { menuRows, totalMenuRevenue };
+  }, [data, priceNames]);
+
   const menuAdjustment = totalSales - totalMenuRevenue;
 
   // Filter bills by search query

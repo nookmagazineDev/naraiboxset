@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, ArrowRight, Delete, RefreshCw, WifiOff } from 'lucide-react';
 import './LoginScreen.css';
 
-const LoginScreen = ({ users, onLogin, lang, isOfflineMode, onRetry }) => {
+const LoginScreen = ({ users, onLogin, lang, onRetry }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [pin, setPin]                   = useState('');
   const [error, setError]               = useState('');

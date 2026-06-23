@@ -28,7 +28,7 @@ const calcCharges = (subtotal, settings = {}, discount = null) => {
 const CheckoutModal = ({
   tableOrderItems = [], total = 0, orderNumber, tableNo = '',
   onClose, onComplete, lang = 'th',
-  settings = {}, discounts = [], users = [], currentUser = null
+  settings = {}, discounts = []
 }) => {
   const [paymentStep, setPaymentStep] = useState('summary');
   const [cashInput, setCashInput] = useState('');
@@ -36,8 +36,8 @@ const CheckoutModal = ({
 
   // อนุมัติสร้าง QR โดยแอดมิน/แคชเชียร์ (ปิดการยืนยันแล้ว → เป็น true เสมอ)
   const [qrApproved, setQrApproved] = useState(true);
-  const [approverName, setApproverName] = useState('');
-  const [approvalId, setApprovalId] = useState('');
+  const [approverName] = useState('');
+  const [approvalId] = useState('');
   const [approvalStatus, setApprovalStatus] = useState('approved'); // idle | pending | approved | rejected
 
   // อัปโหลดสลิปการโอน
@@ -97,7 +97,7 @@ const CheckoutModal = ({
   const [splitTransfer, setSplitTransfer] = useState('');
   const [splitCard, setSplitCard] = useState('');
 
-  const { subtotal, discountAmount, afterDiscount, sc, vat, grand } = calcCharges(total, settings, selectedDiscount);
+  const { subtotal, discountAmount, sc, vat, grand } = calcCharges(total, settings, selectedDiscount);
   const hasCharges = sc > 0 || vat > 0;
   const hasDiscount = discountAmount > 0;
 

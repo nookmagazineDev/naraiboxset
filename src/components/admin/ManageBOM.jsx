@@ -3,7 +3,6 @@ import {
   FlaskConical, Save, Plus, Trash2, Search,
   Package, RefreshCw, Upload, ChevronRight, Edit2, X
 } from 'lucide-react';
-import { useOutletContext } from 'react-router-dom';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3XyaHUni23zgFET3q7ATSpBTzftfNX7ILvbEYbG134KAl/exec';
 
@@ -12,7 +11,6 @@ const getBomRows = (bomConfig, menuId) =>
   menuId ? (bomConfig[String(menuId)] || []) : [];
 
 const ManageBOM = () => {
-  const { lang } = useOutletContext();
 
   // ─── Tabs ────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState('bom'); // 'bom' | 'ingredients'

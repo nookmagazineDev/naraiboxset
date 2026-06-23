@@ -90,34 +90,6 @@ const ManageMenu = () => {
     setLoading(false);
   };
 
-  const handleSaveMenu = async (newMenuArray) => {
-    try {
-      await fetch(GAS_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          action: 'saveMenu',
-          items: newMenuArray
-        })
-      });
-      setMenuItems(newMenuArray);
-      setIsModalOpen(false);
-
-      const cached = localStorage.getItem('gas_all_data');
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          parsed.menu = newMenuArray;
-          localStorage.setItem('gas_all_data', JSON.stringify(parsed));
-          window.dispatchEvent(new Event('appDataChanged'));
-        } catch(e) { console.error(e); }
-      }
-    } catch(e) {
-      alert('Failed to save to database');
-    }
-  };
-
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this menu item?')) {
       const updated = menuItems.filter(item => item.id !== id);

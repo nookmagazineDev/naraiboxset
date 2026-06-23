@@ -39,7 +39,7 @@ const parseItemQty = (detail) => {
   let qty = 1;
   let name = s;
   
-  const match = s.match(/(.*?)\s*[\(\[]\s*x?\s*(\d+)\s*[\)\]]$/i) ||
+  const match = s.match(/(.*?)\s*[([]\s*x?\s*(\d+)\s*[)\]]$/i) ||
                 s.match(/(.*?)\s*[xX*×]\s*(\d+)$/);
                 
   if (match) {

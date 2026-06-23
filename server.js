@@ -9,7 +9,7 @@ app.use(cors());
 app.use(express.json()); // For handling JSON payloads
 
 app.post('/print', async (req, res) => {
-  const { ip, type, orderData, printerType = 'receipt' } = req.body;
+  const { ip, orderData, printerType = 'receipt' } = req.body;
 
   if (!ip) {
     return res.status(400).json({ success: false, error: 'Printer IP address is required' });

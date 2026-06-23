@@ -21,8 +21,6 @@ const CartModal = ({ cart, onClose, onRemove, onUpdateQuantity, onUpdateNote, on
     return { sc, vat, grand: subtotal + sc + vat };
   };
 
-  const calculateTotal = () => calculateSubtotal();
-
   const getSubtotal = (item) => {
       let itemTotal = Number(item.food.price);
       if (item.allPopups && item.allPopups.length > 0) {

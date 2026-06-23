@@ -1,16 +1,17 @@
 import React, { useState, lazy, Suspense } from 'react';
-import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import { ShoppingCart, ClipboardList, Store, Globe, ShoppingBag, RefreshCw } from 'lucide-react';
 import FoodCard from './components/FoodCard';
 import OrderWizardModal from './components/OrderWizardModal';
 import CartModal from './components/CartModal';
-import CheckoutModal from './components/CheckoutModal';
 import TableSelection from './components/TableSelection';
 import PaymentApprovalListener from './components/PaymentApprovalListener';
 import TableOrderView from './components/TableOrderView';
 import LoginScreen from './components/LoginScreen';
 import ShiftModal from './components/ShiftModal';
-import SalesSummaryModal from './components/SalesSummaryModal';
+// โหลดแบบ lazy: 2 โมดอลนี้ลากไลบรารีหนัก (html2canvas, qrcode) เปิดตอนกดเท่านั้น → bundle หน้าแรกเล็กลง
+const SalesSummaryModal = lazy(() => import('./components/SalesSummaryModal'));
+const CheckoutModal = lazy(() => import('./components/CheckoutModal'));
 // โหลดแบบ lazy: หน้าหลังบ้าน/ครัว/เหล้า/บิลค้าง ไม่ต้องโหลดตอนเปิดหน้าร้าน → เริ่มแอปไวขึ้น
 const KitchenMonitor = lazy(() => import('./components/KitchenMonitor'));
 const AdminLayout = lazy(() => import('./components/admin/AdminLayout'));
@@ -34,7 +35,6 @@ const MENU_ITEMS = [];
 
 function App() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [activeCategory, setActiveCategory] = useState('food');
   const [lang, setLang] = useState('th');
   // ประเภทลูกค้าที่เลือกอยู่ (กำหนดราคาของทุกเมนู) — '' = ราคาปกติ
@@ -66,7 +66,7 @@ function App() {
 
   const handleOpenShift = async (openCash) => {
     try {
-      const res  = await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'openShift', staff: currentUser?.username || '', openCash }) });
+      await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'openShift', staff: currentUser?.username || '', openCash }) });
     } catch (e) {}
     const shiftId = 'SHIFT-' + Date.now();
     const shift = { id: shiftId, openTime: new Date().toISOString(), openStaff: currentUser?.username || '', openCash };
@@ -322,6 +322,12 @@ function App() {
   };
 
   React.useEffect(() => {
+    // แสดงเมนู/หมวดหมู่จาก cache ในเครื่องทันที ไม่ต้องรอ GAS (ตอบช้า + ดึงประวัติออเดอร์ทั้งหมด)
+    // ของจริงจะ sync ทับเบื้องหลัง — changed() กันไม่ให้ re-render ซ้ำถ้าข้อมูลเหมือนเดิม
+    const cached = localStorage.getItem('gas_all_data');
+    if (cached) {
+      try { processAppGASData(JSON.parse(cached)); } catch {}
+    }
     fetchOrdersFromSheet();
     const interval = setInterval(fetchOrdersFromSheet, 10000);
     const handleLocalUpdate = () => {
@@ -1116,28 +1122,32 @@ function App() {
       )}
 
       {showSalesSummaryModal && (
-        <SalesSummaryModal
-          lang={lang}
-          initialMode={salesSummaryMode}
-          allMenu={allMenu}
-          onClose={() => setShowSalesSummaryModal(false)}
-        />
+        <Suspense fallback={null}>
+          <SalesSummaryModal
+            lang={lang}
+            initialMode={salesSummaryMode}
+            allMenu={allMenu}
+            onClose={() => setShowSalesSummaryModal(false)}
+          />
+        </Suspense>
       )}
 
       {isCheckoutOpen && (
-        <CheckoutModal
-          tableOrderItems={checkoutItems}
-          total={checkoutTotal}
-          lang={lang}
-          orderNumber={`#${String(maxOrderNum + 1).padStart(3, '0')}`}
-          onClose={() => setIsCheckoutOpen(false)}
-          onComplete={handleCheckoutComplete}
-          settings={posSettings}
-          discounts={posDiscounts}
-          users={users}
-          currentUser={currentUser}
-          tableNo={tableNumber}
-        />
+        <Suspense fallback={null}>
+          <CheckoutModal
+            tableOrderItems={checkoutItems}
+            total={checkoutTotal}
+            lang={lang}
+            orderNumber={`#${String(maxOrderNum + 1).padStart(3, '0')}`}
+            onClose={() => setIsCheckoutOpen(false)}
+            onComplete={handleCheckoutComplete}
+            settings={posSettings}
+            discounts={posDiscounts}
+            users={users}
+            currentUser={currentUser}
+            tableNo={tableNumber}
+          />
+        </Suspense>
       )}
 
       {/* แจ้งเตือนคำขออนุมัติ QR — เฉพาะแอดมิน/แคชเชียร์ */}

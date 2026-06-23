@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Save, X, Users, Eye, EyeOff, ShieldCheck, ShieldOff, CheckCircle } from 'lucide-react';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3XyaHUni23zgFET3q7ATSpBTzftfNX7ILvbEYbG134KAl/exec';
@@ -26,7 +25,6 @@ const ROLE_OPTIONS = [
 ];
 
 export default function ManageUsers() {
-  const { lang } = useOutletContext();
   const [users,     setUsers]     = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);

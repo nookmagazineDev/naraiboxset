@@ -13,7 +13,7 @@ const STATUS_CONFIG = {
 const DEFAULT_STOCK_IN = { ingId: '', qty: '', pricePerUnit: '', note: '' };
 
 const ManageStock = () => {
-  const { lang, canSeeCost = true } = useOutletContext();
+  const { canSeeCost = true } = useOutletContext();
   const [stock, setStock] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -228,7 +228,7 @@ const ManageStock = () => {
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((item, idx) => {
+                {sorted.map((item) => {
                   const cfg = STATUS_CONFIG[item.status];
                   const stockValue = item.current * item.price;
                   return (

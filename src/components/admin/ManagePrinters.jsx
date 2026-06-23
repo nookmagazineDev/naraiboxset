@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Printer, Save, CheckCircle, XCircle, AlertCircle, Plus, Trash2 } from 'lucide-react';
-import { useOutletContext } from 'react-router-dom';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3XyaHUni23zgFET3q7ATSpBTzftfNX7ILvbEYbG134KAl/exec';
 
@@ -14,7 +13,6 @@ const PRINTER_TYPES = [
 const DEFAULT_PRINTER = () => ({ id: Date.now(), name: '', ip: '', type: 'kitchen' });
 
 const ManagePrinters = () => {
-  const { lang } = useOutletContext();
   const [printers, setPrinters] = useState([]);
   const [testStatus, setTestStatus] = useState({}); // { [id]: { status, msg } }
   const [saved, setSaved] = useState(false);

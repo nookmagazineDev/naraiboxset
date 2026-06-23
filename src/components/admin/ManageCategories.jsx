@@ -7,7 +7,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3
 const ManageCategories = () => {
   const { lang } = useOutletContext();
   const [categories, setCategories] = useState([]);
-  const [menuList, setMenuList] = useState([]);
+  const [, setMenuList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -108,7 +108,7 @@ const ManageCategories = () => {
     setDraggedIdx(null);
   };
 
-  const handleDragOver = (e, index) => {
+  const handleDragOver = (e) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   };
@@ -180,17 +180,6 @@ const ManageCategories = () => {
     } catch(err) {
       alert('Failed to save to database');
     }
-  };
-
-  const handleItemToggle = (field, id) => {
-    setEditingItem(prev => {
-      const current = prev[field] || [];
-      if (current.includes(id)) {
-        return { ...prev, [field]: current.filter(i => i !== id) };
-      } else {
-        return { ...prev, [field]: [...current, id] };
-      }
-    });
   };
 
   const handleAutoTranslate = async () => {

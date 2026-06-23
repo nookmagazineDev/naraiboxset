@@ -57,8 +57,6 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
   const pop5Config = resolvePopupConfig('hasPopup5', 'popup5Min', 'popup5Category', 'popup5Items', null, 'popup5Free', 'popup5Max', 'popup5ItemsMax', 'popup5AllowRepeat');
   const pop6Config = resolvePopupConfig('hasPopup6', 'popup6Min', 'popup6Category', 'popup6Items', null, 'popup6Free', 'popup6Max', 'popup6ItemsMax', 'popup6AllowRepeat');
 
-  if (!food) return null;
-
   // Qty helpers: selectedQty = { itemId: count }
   const getQty = (qtyMap, id) => qtyMap[id] || 0;
   const totalQty = (qtyMap) => Object.values(qtyMap).reduce((s, v) => s + v, 0);
@@ -103,6 +101,9 @@ const OrderWizardModal = ({ food, onClose, onConfirm, lang = 'th', liveMenu = []
       handleSubmit();
     }
   }, [validSteps.length]);
+
+  // food การันตีว่ามีค่าจาก parent เสมอ — เช็คหลัง hooks ทั้งหมด เพื่อไม่ให้ลำดับ hooks เปลี่ยน (Rules of Hooks)
+  if (!food) return null;
 
   const handleNext = () => {
     const checkStep = (stepNum, config, selected) => {
