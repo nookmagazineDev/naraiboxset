@@ -544,6 +544,46 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
     URL.revokeObjectURL(url);
   };
 
+  // สถิติการขายของเมนูหนึ่งๆ (จานเดี่ยวคิดราคา/ฟรี + แยกว่าอยู่ในชุด/ป๊อปอัปไหนบ้าง) — ชุดเดียวกับการ์ด drilldown
+  const computeItemStats = (itemName) => {
+    const query = String(itemName).toLowerCase().trim();
+    let standalonePaidQty = 0, standaloneFreeQty = 0;
+    const popupMap = {};
+    bills.forEach(bill => {
+      bill.items.forEach(item => {
+        if (item.name.toLowerCase().trim() === query) {
+          if (item.price > 0) standalonePaidQty += item.qty;
+          else standaloneFreeQty += item.qty;
+        }
+        if (item.subItems && item.subItems.length > 0) {
+          item.subItems.forEach(sub => {
+            sub.replace(/^↳/, '').trim().split(',').forEach(part => {
+              const parsed = parseItemQty(part.trim());
+              if (parsed.name.toLowerCase().trim() === query) {
+                popupMap[item.name] = (popupMap[item.name] || 0) + item.qty * parsed.qty;
+              }
+            });
+          });
+        }
+      });
+    });
+    const popupList = Object.entries(popupMap).map(([mainName, qty]) => ({ mainName, qty })).sort((a, b) => b.qty - a.qty);
+    return { standalonePaidQty, standaloneFreeQty, popupList, totalPopupQty: popupList.reduce((s, p) => s + p.qty, 0) };
+  };
+
+  // แตกแถวย่อยสถิติใต้เมนู (จานเดี่ยว/ในชุด-ป๊อปอัป) — label อยู่คอลัมน์ชื่อเมนู, จำนวนอยู่คอลัมน์จำนวน
+  const buildItemStatRows = (itemName) => {
+    const st = computeItemStats(itemName);
+    if (st.totalPopupQty === 0 && st.standaloneFreeQty === 0) return []; // ไม่มีอะไรให้แยก → ข้าม
+    const rows = [['', '   • จานเดี่ยวที่คิดราคา', '', st.standalonePaidQty, '']];
+    if (st.standaloneFreeQty > 0) rows.push(['', '   • จานเดี่ยวโปรโมชั่น (ฟรี)', '', st.standaloneFreeQty, '']);
+    if (st.totalPopupQty > 0) {
+      rows.push(['', '   • รายการที่เลือกในชุด/ป๊อปอัป', '', st.totalPopupQty, '']);
+      st.popupList.forEach(p => rows.push(['', `       ↳ อยู่ใน ${p.mainName}`, '', p.qty, '']));
+    }
+    return rows;
+  };
+
   const handleExportExcel = () => {
     if (view === 'summary') {
       const summaryRows = [
@@ -558,12 +598,9 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
         [],
         ['ยอดขายสะสมรายเมนู'],
         ['อันดับ', 'ชื่อเมนู', 'หมวดหมู่', 'จำนวนที่ขายได้', 'รายได้รวม (บาท)'],
-        ...menuRows.map((r, i) => [
-          i + 1,
-          r.name,
-          getMenuCategoryName(r.name),
-          r.qty,
-          r.revenue
+        ...menuRows.flatMap((r, i) => [
+          [i + 1, r.name, getMenuCategoryName(r.name), r.qty, r.revenue],
+          ...buildItemStatRows(r.name)
         ]),
         ...(menuAdjustment !== 0 ? [
           ['—', 'ส่วนต่าง (ส่วนลด / ภาษี / Service Charge)', '—', '—', menuAdjustment]
