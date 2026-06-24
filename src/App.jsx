@@ -48,12 +48,14 @@ function App() {
   const [users, setUsers] = useState(() => {
     try { return JSON.parse(localStorage.getItem('cached_users') || '[]'); } catch { return []; }
   });
-  const [currentUser, setCurrentUser] = useState({ id: 'admin', username: 'Admin', canCheckout: true, isAdmin: true });
+  const [currentUser, setCurrentUser] = useState({ id: 'admin', username: 'Admin', branch: 'admin', canCheckout: true, isAdmin: true });
 
   // สิทธิ์แอดมิน: รองรับ flag isAdmin จากชีต และเผื่อ user ชื่อ admin
   const isAdmin = !!(currentUser && (currentUser.isAdmin === true || currentUser.isAdmin === 'TRUE' || String(currentUser.username || '').toLowerCase() === 'admin'));
   // สิทธิ์แคชเชียร์: เข้าหลังบ้านได้บางหน้า (ไม่เห็นราคาต้นทุน)
   const isCashier = !isAdmin && !!(currentUser && (currentUser.isCashier === true || currentUser.isCashier === 'TRUE'));
+  // สาขาของผู้ใช้ปัจจุบัน = คอลัม A ของชีต Users (branch) — ใช้บันทึกลง Orders.RecordedBy และกรองรายงาน
+  const branch = String(currentUser?.branch || currentUser?.id || currentUser?.username || '').trim();
 
   // Shift state
   const [currentShift, setCurrentShift] = useState(() => {
@@ -527,7 +529,7 @@ function App() {
         Options: parts.join(', '),
         Timestamp: timestamp,
         Status: 'pending',
-        RecordedBy: currentUser ? currentUser.username : ''
+        RecordedBy: branch
       };
     });
 
@@ -564,7 +566,7 @@ function App() {
           sessionId,
           items: cartForServer,
           timestamp,
-          recordedBy: currentUser ? currentUser.username : ''
+          recordedBy: branch
         })
       });
       // Refresh after saving
@@ -630,14 +632,14 @@ function App() {
       rowsToSend.push([
         timestamp, newOrderNumber, customerName, address,
         item.ItemName, 'ทานที่ร้าน', price,
-        finalTotal, 'Completed', timestamp, timestamp, currentUser ? currentUser.username : '',
+        finalTotal, 'Completed', timestamp, timestamp, branch,
         qty
       ]);
       if (item.Options) {
         rowsToSend.push([
           timestamp, newOrderNumber, customerName, address,
           `↳ ${item.Options}`, 'ทานที่ร้าน', 0,
-          finalTotal, 'Completed', timestamp, timestamp, currentUser ? currentUser.username : '',
+          finalTotal, 'Completed', timestamp, timestamp, branch,
           ""
         ]);
       }
@@ -1082,7 +1084,7 @@ function App() {
           <Route path="settings" element={isAdmin ? <ManageSettings /> : <Navigate to="/admin" replace />} />
           <Route path="bom" element={isAdmin ? <ManageBOM /> : <Navigate to="/admin" replace />} />
           <Route path="stock" element={<ManageStock />} />
-          <Route path="reports" element={isAdmin ? <Reports allMenu={allMenu} /> : <Navigate to="/admin" replace />} />
+          <Route path="reports" element={(isAdmin || isCashier) ? <Reports allMenu={allMenu} isAdmin={isAdmin} branch={branch} users={users} /> : <Navigate to="/admin" replace />} />
         </Route>
       </Routes>
       </Suspense>
@@ -1132,6 +1134,9 @@ function App() {
             initialMode={salesSummaryMode}
             allMenu={allMenu}
             categories={allCategories.length > 0 ? allCategories : categories}
+            isAdmin={isAdmin}
+            branch={branch}
+            users={users}
             onClose={() => setShowSalesSummaryModal(false)}
           />
         </Suspense>

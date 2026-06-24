@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { User, ArrowRight, Delete, RefreshCw, WifiOff } from 'lucide-react';
+import { User, ArrowRight, RefreshCw, WifiOff } from 'lucide-react';
 import './LoginScreen.css';
+
+// ชื่อสาขา = คอลัม A ของชีต Users (branch) — เผื่อข้อมูลเก่าที่ยังไม่มี branch ให้ใช้ id/username แทน
+const branchName = (u) => String(u?.branch || u?.id || u?.username || '').trim();
 
 const LoginScreen = ({ users, onLogin, lang, onRetry }) => {
   const [selectedUser, setSelectedUser] = useState(null);
-  const [pin, setPin]                   = useState('');
+  const [password, setPassword]         = useState('');
   const [error, setError]               = useState('');
   const [retrying, setRetrying]         = useState(false);
   // แสดงปุ่ม retry หลังรอ 5 วิโดยไม่มี users
@@ -16,28 +19,24 @@ const LoginScreen = ({ users, onLogin, lang, onRetry }) => {
     return () => clearTimeout(t);
   }, [users]);
 
-  const handleUserSelect = (user) => { setSelectedUser(user); setPin(''); setError(''); };
-
-  const handlePinPress = (digit) => {
-    if (pin.length < 4) {
-      const next = pin + digit;
-      setPin(next);
-      if (next.length === 4) verifyLogin(next);
-    }
-  };
-
-  const handleDelete = () => { setPin(pin.slice(0, -1)); setError(''); };
+  const handleUserSelect = (user) => { setSelectedUser(user); setPassword(''); setError(''); };
 
   const verifyLogin = (entered) => {
     if (String(selectedUser.pin) === String(entered)) {
       onLogin(selectedUser);
     } else {
-      setError(lang === 'th' ? 'รหัส PIN ไม่ถูกต้อง' : 'Invalid PIN');
-      setPin('');
+      setError(lang === 'th' ? 'รหัสผ่านไม่ถูกต้อง' : 'Invalid password');
+      setPassword('');
     }
   };
 
-  const handleDefaultAdmin = () => onLogin({ id: 'admin', username: 'Admin', canCheckout: true, isAdmin: true });
+  const handleSubmit = (e) => {
+    if (e) e.preventDefault();
+    if (!password) return;
+    verifyLogin(password);
+  };
+
+  const handleDefaultAdmin = () => onLogin({ id: 'admin', username: 'Admin', branch: 'admin', canCheckout: true, isAdmin: true });
 
   const handleRetry = async () => {
     setRetrying(true);
@@ -52,7 +51,7 @@ const LoginScreen = ({ users, onLogin, lang, onRetry }) => {
     <div className="login-container">
       <div className="login-box">
         <h1 className="login-title">{lang === 'th' ? 'เข้าสู่ระบบ' : 'Login'}</h1>
-        <p className="login-subtitle">{lang === 'th' ? 'เลือกรหัสพนักงานของคุณ' : 'Select your user account'}</p>
+        <p className="login-subtitle">{lang === 'th' ? 'เลือกสาขาของคุณ' : 'Select your branch'}</p>
 
         {(!users || users.length === 0) ? (
           /* ── ไม่มี users ── */
@@ -101,45 +100,59 @@ const LoginScreen = ({ users, onLogin, lang, onRetry }) => {
 
           </div>
         ) : !selectedUser ? (
-          /* ── มี users — เลือกได้เลย ── */
+          /* ── มี users — เลือกสาขา ── */
           <div className="user-grid">
             {users.map(user => (
               <button key={user.id} className="user-select-btn" onClick={() => handleUserSelect(user)}>
                 <div className="user-avatar"><User size={28} /></div>
-                <span>{user.username}</span>
+                <span>{branchName(user) || user.username}</span>
               </button>
             ))}
           </div>
         ) : (
-          /* ── กรอก PIN ── */
-          <div className="pin-container">
+          /* ── กรอกรหัสผ่าน ── */
+          <form className="pin-container" onSubmit={handleSubmit}>
             <div className="selected-user-header">
-              <button className="back-btn" onClick={() => setSelectedUser(null)}>
+              <button type="button" className="back-btn" onClick={() => setSelectedUser(null)}>
                 <ArrowRight size={20} style={{ transform: 'rotate(180deg)' }} />
               </button>
               <div className="current-user-info">
                 <User size={20} />
-                <span>{selectedUser.username}</span>
+                <span>{branchName(selectedUser) || selectedUser.username}</span>
               </div>
             </div>
             <p style={{ textAlign: 'center', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-              {lang === 'th' ? 'กรุณากรอกรหัส PIN 4 หลัก' : 'Enter 4-digit PIN'}
+              {lang === 'th' ? 'กรุณากรอกรหัสผ่านของสาขา' : 'Enter branch password'}
             </p>
-            <div className="pin-dots">
-              {[0, 1, 2, 3].map(i => (
-                <div key={i} className={`pin-dot ${pin.length > i ? 'filled' : ''}`} />
-              ))}
-            </div>
-            {error && <div className="pin-error">{error}</div>}
-            <div className="pin-numpad">
-              {[1,2,3,4,5,6,7,8,9].map(n => (
-                <button key={n} className="numpad-btn" onClick={() => handlePinPress(String(n))}>{n}</button>
-              ))}
-              <div className="numpad-empty" />
-              <button className="numpad-btn" onClick={() => handlePinPress('0')}>0</button>
-              <button className="numpad-btn delete" onClick={handleDelete}><Delete size={24} /></button>
-            </div>
-          </div>
+            <input
+              type="password"
+              className="branch-password-input"
+              value={password}
+              onChange={e => { setPassword(e.target.value); setError(''); }}
+              placeholder={lang === 'th' ? 'รหัสผ่าน' : 'Password'}
+              autoFocus
+              style={{
+                width: '100%', boxSizing: 'border-box', textAlign: 'center',
+                padding: '0.85rem 1rem', fontSize: '1.1rem', letterSpacing: '0.15rem',
+                background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.18)',
+                borderRadius: 12, color: 'white', outline: 'none', fontFamily: 'inherit',
+              }}
+            />
+            {error && <div className="pin-error" style={{ marginTop: '0.75rem' }}>{error}</div>}
+            <button
+              type="submit"
+              disabled={!password}
+              style={{
+                marginTop: '1.1rem', width: '100%', padding: '0.85rem',
+                background: password ? '#f97316' : 'rgba(255,255,255,0.08)',
+                border: 'none', borderRadius: 12, color: password ? 'white' : 'rgba(255,255,255,0.35)',
+                fontWeight: 700, fontSize: '1rem', cursor: password ? 'pointer' : 'not-allowed',
+                fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+              }}
+            >
+              {lang === 'th' ? 'เข้าสู่ระบบ' : 'Login'} <ArrowRight size={18} />
+            </button>
+          </form>
         )}
       </div>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>

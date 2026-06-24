@@ -83,13 +83,28 @@ const card   = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(2
 const th_    = { padding: '0.65rem 0.9rem', textAlign: 'left', color: 'rgba(255,255,255,0.45)', fontWeight: 600, fontSize: '0.78rem', borderBottom: '1px solid rgba(255,255,255,0.07)', whiteSpace: 'nowrap' };
 const td_    = { padding: '0.65rem 0.9rem', fontSize: '0.875rem', borderBottom: '1px solid rgba(255,255,255,0.04)' };
 
-export default function Reports({ allMenu = [] }) {
+const branchOf = (u) => String(u?.branch || u?.id || u?.username || '').trim();
+
+export default function Reports({ allMenu = [], isAdmin = false, branch = '', users = [] }) {
   const [tab,     setTab]     = useState('daily');
   const [from,    setFrom]    = useState(TODAY);
   const [to,      setTo]      = useState(TODAY);
   const [loading, setLoading] = useState(false);
   const [data,    setData]    = useState(null);
   const [error,   setError]   = useState('');
+  // ฟิลเตอร์สาขา: admin เลือกได้ทุกสาขา (ค่าว่าง=ทุกสาขา), ไม่ใช่ admin ล็อกเฉพาะสาขาตัวเอง
+  const [branchFilter, setBranchFilter] = useState(isAdmin ? '' : branch);
+  const inBranch = (r) => !branchFilter || String(r.RecordedBy || '').trim() === branchFilter;
+  const branchOptions = (() => {
+    const set = new Set();
+    (users || []).forEach(u => { const b = branchOf(u); if (b) set.add(b); });
+    (data?.orders || []).forEach(r => { const b = String(r.RecordedBy || '').trim(); if (b) set.add(b); });
+    return Array.from(set).sort();
+  })();
+  // กรองรอบกะตามสาขา (เทียบกับพนักงานเปิด/ปิดกะ) — ค่าว่าง=ทุกสาขา
+  const filteredShifts = (data?.shifts || []).filter(s =>
+    !branchFilter || String(s.openStaff || '').trim() === branchFilter || String(s.closeStaff || '').trim() === branchFilter
+  );
 
   React.useEffect(() => {
     load(from, to);
@@ -112,6 +127,7 @@ export default function Reports({ allMenu = [] }) {
   const orderMap = {};
   (data?.orders || []).forEach(r => {
     if (!r.OrderNumber || r.Status === 'cancelled') return;
+    if (!inBranch(r)) return;
     if (!orderMap[r.OrderNumber]) {
       orderMap[r.OrderNumber] = {
         orderNumber: r.OrderNumber, customerName: r.CustomerName,
@@ -126,6 +142,7 @@ export default function Reports({ allMenu = [] }) {
   const cancelledOrders = [];
   const seen = new Set();
   (data?.orders || []).forEach(r => {
+    if (!inBranch(r)) return;
     if (r.Status === 'cancelled' && r.OrderNumber && !String(r.ItemDetail || '').startsWith('↳') && !seen.has(r.OrderNumber)) {
       seen.add(r.OrderNumber);
       cancelledOrders.push({ ...r, paymentMethod: payMap[r.OrderNumber]?.paymentMethod || '—' });
@@ -173,6 +190,7 @@ export default function Reports({ allMenu = [] }) {
   const ordersGroupedByNum = {};
   (data?.orders || []).forEach(r => {
     if (!r.OrderNumber || r.Status === 'cancelled') return;
+    if (!inBranch(r)) return;
     if (!ordersGroupedByNum[r.OrderNumber]) ordersGroupedByNum[r.OrderNumber] = [];
     ordersGroupedByNum[r.OrderNumber].push(r);
   });
@@ -259,7 +277,7 @@ export default function Reports({ allMenu = [] }) {
     exportXLSX([{ name: 'ประวัติยกเลิก', headers: ['วันเวลา','เลขบิล','โต๊ะ','ยอดรวม','พนักงาน'], rows }], `ประวัติยกเลิก_${from}_${to}`);
   };
   const exportShift = () => {
-    const rows = (data?.shifts || []).map(s => {
+    const rows = filteredShifts.map(s => {
       const diff = s.status === 'closed' ? (Number(s.closeCash) || 0) - (Number(s.openCash) || 0) - (Number(s.totalCash) || 0) : '';
       return [s.id, s.status === 'open' ? 'เปิดอยู่' : 'ปิดแล้ว', fmtD(s.openTime), s.openStaff, fmtD(s.closeTime), s.closeStaff, s.openCash, s.closeCash, s.totalSales, s.totalCash, s.totalTransfer, s.totalCard, s.totalOrders, diff, s.note || ''];
     });
@@ -277,7 +295,7 @@ export default function Reports({ allMenu = [] }) {
       { name: 'ประวัติการขาย',     headers: ['วันเวลา','เลขบิล','โต๊ะ','ยอดรวม','ชำระด้วย','พนักงาน'],                      rows: completedOrders.map(o => [fmtD(o.timestamp), o.orderNumber, o.customerName, o.total, o.paymentMethod, o.staff]) },
       { name: 'ประวัติยกเลิก',     headers: ['วันเวลา','เลขบิล','โต๊ะ','ยอดรวม','พนักงาน'],                                 rows: cancelledOrders.map(o => [fmtD(o.Timestamp), o.OrderNumber, o.CustomerName, o.TotalAmount, o.RecordedBy || '—']) },
       { name: 'รายงานปิดกะ',       headers: ['รหัสกะ','สถานะ','เวลาเปิด','พนักงานเปิด','เวลาปิด','พนักงานปิด','เงินเปิดกะ','เงินปิดกะ','ยอดขายรวม','เงินสด','โอน/QR','บัตร','จำนวนบิล','ส่วนต่างเงินสด','หมายเหตุ'],
-        rows: (data?.shifts || []).map(s => { const d = s.status==='closed'?(Number(s.closeCash)||0)-(Number(s.openCash)||0)-(Number(s.totalCash)||0):''; return [s.id, s.status==='open'?'เปิดอยู่':'ปิดแล้ว', fmtD(s.openTime), s.openStaff, fmtD(s.closeTime), s.closeStaff, s.openCash, s.closeCash, s.totalSales, s.totalCash, s.totalTransfer, s.totalCard, s.totalOrders, d, s.note||'']; }) },
+        rows: filteredShifts.map(s => { const d = s.status==='closed'?(Number(s.closeCash)||0)-(Number(s.openCash)||0)-(Number(s.totalCash)||0):''; return [s.id, s.status==='open'?'เปิดอยู่':'ปิดแล้ว', fmtD(s.openTime), s.openStaff, fmtD(s.closeTime), s.closeStaff, s.openCash, s.closeCash, s.totalSales, s.totalCash, s.totalTransfer, s.totalCard, s.totalOrders, d, s.note||'']; }) },
     ], `รายงานทั้งหมด_${from}_${to}`);
   };
 
@@ -318,6 +336,19 @@ export default function Reports({ allMenu = [] }) {
             {loading ? 'กำลังโหลด...' : 'โหลดข้อมูล'}
           </button>
         </div>
+      </div>
+
+      {/* Branch filter — admin เลือกได้ทุกสาขา / ไม่ใช่ admin ล็อกเฉพาะของตัวเอง */}
+      <div style={{ ...card, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>🏠 สาขา</span>
+        {isAdmin ? (
+          <select value={branchFilter} onChange={e => setBranchFilter(e.target.value)} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: 'white', padding: '0.4rem 0.75rem', fontFamily: 'inherit', fontSize: '0.85rem', outline: 'none', minWidth: 200 }}>
+            <option value="">ทุกสาขา (All branches)</option>
+            {branchOptions.map(b => <option key={b} value={b}>{b}</option>)}
+          </select>
+        ) : (
+          <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#a78bfa', background: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)', borderRadius: 8, padding: '0.3rem 0.85rem' }}>{branchFilter || '—'}</span>
+        )}
       </div>
 
       {error && <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '0.75rem 1rem', color: '#ef4444', marginBottom: '1rem', fontSize: '0.9rem' }}>{error}</div>}
@@ -507,10 +538,10 @@ export default function Reports({ allMenu = [] }) {
 
           {/* ── Tab: รายงานปิดกะ ── */}
           {tab === 'shift' && (
-            (data?.shifts || []).length === 0
+            filteredShifts.length === 0
               ? <div style={{ ...card, textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.35)' }}>ยังไม่มีประวัติการเปิด-ปิดกะ</div>
               : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {[...(data.shifts)].reverse().map((s, i) => {
+                  {[...filteredShifts].reverse().map((s, i) => {
                     const openCash_  = Number(s.openCash)  || 0;
                     const closeCash_ = Number(s.closeCash) || 0;
                     const totalCsh   = Number(s.totalCash) || 0;

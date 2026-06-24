@@ -47,8 +47,14 @@ const parseItemQty = (detail) => {
   return { name, qty };
 };
 
-const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], categories = [], onClose }) => {
+// ชื่อสาขา = คอลัม A ของชีต Users (branch) — เผื่อข้อมูลเก่าใช้ id/username แทน
+const branchOf = (u) => String(u?.branch || u?.id || u?.username || '').trim();
+
+const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], categories = [], isAdmin = false, branch = '', users = [], onClose }) => {
   const todayStr = getThaiTodayStr();
+
+  // ฟิลเตอร์สาขา: admin เลือกได้ทุกสาขา (ค่าว่าง = ทุกสาขา), สาขาทั่วไปล็อกเฉพาะของตัวเอง
+  const [branchFilter, setBranchFilter] = useState(isAdmin ? '' : branch);
   
   // Date States
   const [from, setFrom] = useState(() => {
@@ -128,6 +134,14 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
     return catNameBySlug[slug] || slug || '—';
   };
 
+  // รายชื่อสาขาสำหรับฟิลเตอร์ (admin) — รวมจากชีต Users + ค่า RecordedBy ที่พบจริง
+  const branchOptions = useMemo(() => {
+    const set = new Set();
+    (users || []).forEach(u => { const b = branchOf(u); if (b) set.add(b); });
+    (data?.orders || []).forEach(r => { const b = String(r.RecordedBy || '').trim(); if (b) set.add(b); });
+    return Array.from(set).sort();
+  }, [users, data]);
+
   // Group Payments by orderNumber
   const payMap = useMemo(() => {
     const map = {};
@@ -140,7 +154,9 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
     const billMap = {};
     (data?.orders || []).forEach(r => {
       if (!r.OrderNumber || r.Status === 'cancelled') return;
-      
+      // กรองตามสาขา (RecordedBy) — ค่าว่าง = ทุกสาขา
+      if (branchFilter && String(r.RecordedBy || '').trim() !== branchFilter) return;
+
       if (!billMap[r.OrderNumber]) {
         billMap[r.OrderNumber] = {
           orderNumber: r.OrderNumber,
@@ -190,7 +206,7 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
     return Object.values(billMap)
       .filter(b => ['completed','Completed'].includes(b.status))
       .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-  }, [data, payMap]);
+  }, [data, payMap, branchFilter]);
 
   // Calculations for Summary — memoize ไว้ ไม่งั้นพิมพ์ค้นหา/สลับหน้าทีจะวนคำนวณใหม่ทั้งก้อนทุกครั้ง
   const { totalSales, totalCash, totalXfer, totalCard, totalBills } = useMemo(() => {
@@ -219,6 +235,7 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
   const ordersGroupedByNum = {};
   (data?.orders || []).forEach(r => {
     if (!r.OrderNumber || r.Status === 'cancelled') return;
+    if (branchFilter && String(r.RecordedBy || '').trim() !== branchFilter) return;
     if (!ordersGroupedByNum[r.OrderNumber]) ordersGroupedByNum[r.OrderNumber] = [];
     ordersGroupedByNum[r.OrderNumber].push(r);
   });
@@ -286,7 +303,7 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
     const menuRows = Object.values(menuMap).sort((a, b) => b.qty - a.qty);
     const totalMenuRevenue = menuRows.reduce((sum, r) => sum + (r.isSubItem ? 0 : r.revenue), 0);
     return { menuRows, totalMenuRevenue };
-  }, [data, priceNames]);
+  }, [data, priceNames, branchFilter]);
 
   const menuAdjustment = totalSales - totalMenuRevenue;
 
@@ -767,6 +784,23 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
               <X size={24} />
             </button>
           </div>
+        </div>
+
+        {/* Branch filter bar — admin เลือกได้ทุกสาขา / สาขาทั่วไปล็อกเฉพาะของตัวเอง */}
+        <div style={{ padding: '0.65rem 1.5rem', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'rgba(124,58,237,0.04)' }}>
+          <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', fontWeight: 600, whiteSpace: 'nowrap' }}>🏠 สาขา</span>
+          {isAdmin ? (
+            <select
+              value={branchFilter}
+              onChange={e => setBranchFilter(e.target.value)}
+              style={{ flex: 1, background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', padding: '0.4rem 0.6rem', fontSize: '0.85rem', outline: 'none', fontFamily: 'inherit' }}
+            >
+              <option value="">ทุกสาขา (All branches)</option>
+              {branchOptions.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          ) : (
+            <span style={{ flex: 1, fontSize: '0.85rem', fontWeight: 700, color: '#c084fc' }}>{branchFilter || '—'}</span>
+          )}
         </div>
 
         {/* Date Selector and Filter Panel */}

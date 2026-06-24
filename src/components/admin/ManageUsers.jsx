@@ -14,7 +14,7 @@ const inp = {
   outline: 'none', boxSizing: 'border-box',
 };
 
-const EMPTY_USER = { id: '', username: '', pin: '', canCheckout: true, isAdmin: false, isCashier: false };
+const EMPTY_USER = { id: '', username: '', pin: '', branch: '', canCheckout: true, isAdmin: false, isCashier: false };
 
 const isTrue = (v) => v === true || v === 'TRUE';
 const userRole = (u) => isTrue(u.isAdmin) ? 'admin' : (isTrue(u.isCashier) ? 'cashier' : 'staff');
@@ -69,7 +69,8 @@ export default function ManageUsers() {
 
   const handleModalSave = () => {
     if (!form.username.trim()) return;
-    if (!form.pin || form.pin.length !== 4) { alert('กรุณากรอก PIN 4 หลัก'); return; }
+    if (!form.branch.trim()) { alert('กรุณากรอกชื่อสาขา'); return; }
+    if (!form.pin) { alert('กรุณากรอกรหัสผ่าน'); return; }
     setUsers(prev => [...prev, { ...form }]);
     setShowModal(false);
     markDirty();
@@ -147,19 +148,22 @@ export default function ManageUsers() {
                       <button onClick={() => setEditId(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.45)', cursor: 'pointer', padding: 4 }}><X size={18} /></button>
                     </div>
                     <div>
-                      <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 5 }}>ชื่อพนักงาน</label>
-                      <input style={inp} value={user.username} onChange={e => handleChange(user.id, 'username', e.target.value)} placeholder="ชื่อพนักงาน" />
+                      <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 5 }}>ชื่อสาขา (Branch)</label>
+                      <input style={inp} value={user.branch || ''} onChange={e => handleChange(user.id, 'branch', e.target.value)} placeholder="เช่น xum, xcm" />
                     </div>
                     <div>
-                      <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 5 }}>PIN (4 หลัก)</label>
+                      <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 5 }}>ชื่อผู้ใช้</label>
+                      <input style={inp} value={user.username} onChange={e => handleChange(user.id, 'username', e.target.value)} placeholder="ชื่อผู้ใช้" />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 5 }}>รหัสผ่าน</label>
                       <div style={{ position: 'relative' }}>
                         <input
                           type={showPin[user.id] ? 'text' : 'password'}
-                          maxLength={4}
-                          style={{ ...inp, paddingRight: '2.5rem', letterSpacing: showPin[user.id] ? '0.25rem' : '0.5rem' }}
+                          style={{ ...inp, paddingRight: '2.5rem', letterSpacing: showPin[user.id] ? '0.1rem' : '0.3rem' }}
                           value={user.pin}
-                          onChange={e => handleChange(user.id, 'pin', e.target.value.replace(/\D/g, ''))}
-                          placeholder="0000"
+                          onChange={e => handleChange(user.id, 'pin', e.target.value)}
+                          placeholder="รหัสผ่าน"
                         />
                         <button onClick={() => setShowPin(p => ({ ...p, [user.id]: !p[user.id] }))} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: 0 }}>
                           {showPin[user.id] ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -202,7 +206,10 @@ export default function ManageUsers() {
                     </div>
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.username || <span style={{ color: 'rgba(255,255,255,0.3)' }}>ไม่มีชื่อ</span>}</div>
+                      <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {user.username || <span style={{ color: 'rgba(255,255,255,0.3)' }}>ไม่มีชื่อ</span>}
+                        {(user.branch || user.id) && <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#c084fc', background: 'rgba(192,132,252,0.12)', border: '1px solid rgba(192,132,252,0.3)', borderRadius: 6, padding: '0.1rem 0.45rem' }}>🏠 {user.branch || user.id}</span>}
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         {/* PIN mask */}
                         <span style={{ display: 'flex', alignItems: 'center', gap: 3, color: 'rgba(255,255,255,0.35)', fontSize: '0.82rem' }}>
@@ -267,28 +274,26 @@ export default function ManageUsers() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div>
-                <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 5 }}>ชื่อพนักงาน *</label>
-                <input style={inp} placeholder="เช่น สมชาย" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} autoFocus />
+                <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 5 }}>ชื่อสาขา (Branch) *</label>
+                <input style={inp} placeholder="เช่น xum, xcm" value={form.branch} onChange={e => setForm(f => ({ ...f, branch: e.target.value }))} autoFocus />
               </div>
               <div>
-                <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 5 }}>PIN (4 หลัก) *</label>
+                <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 5 }}>ชื่อผู้ใช้ *</label>
+                <input style={inp} placeholder="ชื่อผู้ใช้" value={form.username} onChange={e => setForm(f => ({ ...f, username: e.target.value }))} />
+              </div>
+              <div>
+                <label style={{ display: 'block', color: 'rgba(255,255,255,0.5)', fontSize: '0.78rem', marginBottom: 5 }}>รหัสผ่าน *</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     type={showPin.__new__ ? 'text' : 'password'}
-                    maxLength={4}
-                    style={{ ...inp, textAlign: 'center', fontSize: '1.5rem', letterSpacing: '0.5rem', paddingRight: '2.5rem' }}
-                    placeholder="0000"
+                    style={{ ...inp, paddingRight: '2.5rem', letterSpacing: '0.15rem' }}
+                    placeholder="รหัสผ่าน"
                     value={form.pin}
-                    onChange={e => setForm(f => ({ ...f, pin: e.target.value.replace(/\D/g, '') }))}
+                    onChange={e => setForm(f => ({ ...f, pin: e.target.value }))}
                   />
                   <button onClick={() => setShowPin(p => ({ ...p, __new__: !p.__new__ }))} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: 0 }}>
                     {showPin.__new__ ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 10 }}>
-                  {[0,1,2,3].map(i => (
-                    <div key={i} style={{ width: 14, height: 14, borderRadius: '50%', background: form.pin.length > i ? '#f97316' : 'rgba(255,255,255,0.15)', transition: 'background 0.15s' }} />
-                  ))}
                 </div>
               </div>
               <div>
@@ -318,7 +323,7 @@ export default function ManageUsers() {
 
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
               <button onClick={() => setShowModal(false)} style={{ flex: 1, padding: '0.8rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'white', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>ยกเลิก</button>
-              <button onClick={handleModalSave} disabled={!form.username.trim() || form.pin.length !== 4} style={{ flex: 2, padding: '0.8rem', background: form.username.trim() && form.pin.length === 4 ? '#ea580c' : '#444', border: 'none', color: 'white', borderRadius: 10, cursor: form.username.trim() && form.pin.length === 4 ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontWeight: 700, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+              <button onClick={handleModalSave} disabled={!form.username.trim() || !form.branch.trim() || !form.pin} style={{ flex: 2, padding: '0.8rem', background: form.username.trim() && form.branch.trim() && form.pin ? '#ea580c' : '#444', border: 'none', color: 'white', borderRadius: 10, cursor: form.username.trim() && form.branch.trim() && form.pin ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontWeight: 700, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                 <Plus size={18} /> เพิ่มพนักงาน
               </button>
             </div>
