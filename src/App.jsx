@@ -1,6 +1,6 @@
 import React, { useState, lazy, Suspense } from 'react';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
-import { ShoppingCart, ClipboardList, Store, Globe, ShoppingBag, RefreshCw } from 'lucide-react';
+import { ShoppingCart, ClipboardList, Store, Globe, ShoppingBag, RefreshCw, LogOut } from 'lucide-react';
 import FoodCard from './components/FoodCard';
 import OrderWizardModal from './components/OrderWizardModal';
 import CartModal from './components/CartModal';
@@ -979,6 +979,13 @@ function App() {
 
                   <button className="pos-header-btn" onClick={() => setLang(lang === 'th' ? 'en' : 'th')}>
                     <Globe size={14} /> {lang === 'th' ? 'TH' : 'EN'}
+                  </button>
+                  <button
+                    className="pos-header-btn"
+                    onClick={() => { if (window.confirm(lang === 'th' ? `ออกจากระบบสาขา "${branch}"?` : 'Log out?')) handleLogout(); }}
+                    style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171' }}
+                  >
+                    <LogOut size={14} /> {lang === 'th' ? `ออกจากระบบ (${branch})` : 'Logout'}
                   </button>
                   <button className="pos-cart-btn" onClick={() => setIsCartOpen(true)}>
                     <ShoppingBag size={20} />

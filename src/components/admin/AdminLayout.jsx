@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, UtensilsCrossed, Tag, LogOut, Store, Layers, FileSpreadsheet, Globe, Users, Settings, Package, FlaskConical, BarChart2 } from 'lucide-react';
 import './Admin.css';
 
-const AdminLayout = ({ lang, setLang, isCashier = false }) => {
+const AdminLayout = ({ lang, setLang, isCashier = false, onLogout }) => {
   const navigate = useNavigate();
   // แคชเชียร์เห็นเฉพาะหน้าเหล่านี้
   const allowAll = !isCashier;
@@ -77,6 +77,14 @@ const AdminLayout = ({ lang, setLang, isCashier = false }) => {
 
              <button className="admin-link logout" style={{ marginTop: '0.5rem' }} onClick={() => navigate('/index')}>
                 <LogOut size={20} /> {lang === 'th' ? 'กลับสู่หน้าร้าน' : 'Exit to Storefront'}
+             </button>
+
+             <button
+                className="admin-link logout"
+                style={{ marginTop: '0.25rem', color: '#f87171' }}
+                onClick={() => { if (onLogout && window.confirm(lang === 'th' ? 'ออกจากระบบ?' : 'Log out?')) onLogout(); }}
+             >
+                <LogOut size={20} /> {lang === 'th' ? 'ออกจากระบบ' : 'Logout'}
              </button>
           </nav>
        </aside>
