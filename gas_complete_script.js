@@ -32,6 +32,7 @@ function initializeSheets() {
   getOrCreateSheet(ss, 'Settings', ['key', 'value']);
   getOrCreateSheet(ss, 'Printers', ['id', 'name', 'ip', 'type']);
   getOrCreateSheet(ss, 'LiquorStorage', ['timestamp', 'type', 'customerName', 'phone', 'productName', 'qty', 'note', 'staff', 'category', 'unit']);
+  getOrCreateSheet(ss, 'Waste', ['timestamp', 'branch', 'itemName', 'category', 'qty', 'unit', 'note', 'staff']);
   getOrCreateSheet(ss, 'PaymentApprovals', ['id', 'timestamp', 'tableNo', 'orderNumber', 'amount', 'requestedBy', 'status', 'approver', 'respondedAt']);
   getOrCreateSheet(ss, 'OutstandingBills', ['id', 'shiftId', 'tableNo', 'customerName', 'phone', 'total', 'items', 'createdAt', 'status']);
   getOrCreateSheet(ss, 'Shifts', ['id', 'openTime', 'closeTime', 'openStaff', 'closeStaff', 'openCash', 'closeCash', 'totalSales', 'totalCash', 'totalCard', 'totalTransfer', 'totalOrders', 'status', 'note']);
@@ -103,7 +104,7 @@ function doGet(e) {
   }
 
   if (action === 'clearSalesData') {
-    var sheetsToClear = ['Orders', 'TableOrders', 'PaymentSummary', 'PaymentApprovals', 'OutstandingBills', 'Shifts', 'ตัดสต็อก', 'รับวัตถุดิบ', 'LiquorStorage'];
+    var sheetsToClear = ['Orders', 'TableOrders', 'PaymentSummary', 'PaymentApprovals', 'OutstandingBills', 'Shifts', 'ตัดสต็อก', 'รับวัตถุดิบ', 'LiquorStorage', 'Waste'];
     sheetsToClear.forEach(function(name) {
       var sh = ss.getSheetByName(name);
       if (sh && sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);
@@ -117,6 +118,9 @@ function doGet(e) {
 
   // ── BOM actions ──
   if (action === 'getLiquorRecords') return _bomJson({ success: true, records: getSheetDataAsObjects(ss, 'LiquorStorage') });
+
+  // รายการทิ้งของเสีย (Waste) — คืนทั้งหมด
+  if (action === 'getWasteRecords') return _bomJson({ success: true, records: getSheetDataAsObjects(ss, 'Waste') });
 
   // คำขออนุมัติ QR — คืนเฉพาะที่ยัง pending หรือเพิ่งตอบใน 10 นาทีล่าสุด
   if (action === 'getPaymentApprovals') {
@@ -157,6 +161,7 @@ function doGet(e) {
     var allOrders   = getSheetDataAsObjects(ss, 'Orders');
     var allPayments = getSheetDataAsObjects(ss, 'PaymentSummary');
     var allShifts   = getSheetDataAsObjects(ss, 'Shifts');
+    var allWaste    = getSheetDataAsObjects(ss, 'Waste');
 
     return _bomJson({
       success:  true,
@@ -164,7 +169,8 @@ function doGet(e) {
       // ส่ง payments ทั้งหมด ไม่กรองตามวันของตัวมันเอง — ฝั่ง client จับคู่ด้วยเลขบิล (orderNumber)
       // กันกรณีแก้/เพิ่ม payment ย้อนหลังคนละวันกับวันที่บิลถูกเปิด แล้วยอดไม่ตรงช่องทางจ่าย
       payments: allPayments,
-      shifts:   allShifts
+      shifts:   allShifts,
+      waste:    filterByDate(allWaste,    'timestamp')
     });
   }
 
@@ -522,6 +528,15 @@ function doPost(e) {
     return _bomJson({ success: true });
   }
 
+  // บันทึกรายการทิ้งของเสีย (Waste)
+  if (action === 'saveWasteRecord') {
+    var wasteHeaders = ['timestamp', 'branch', 'itemName', 'category', 'qty', 'unit', 'note', 'staff'];
+    var wsh = getOrCreateSheet(ss, 'Waste', wasteHeaders);
+    wsh.getRange(1, 1, 1, wasteHeaders.length).setValues([wasteHeaders]);
+    wsh.appendRow([postData.timestamp || new Date().toISOString(), postData.branch || '', postData.itemName || '', postData.category || '', Number(postData.qty) || 0, postData.unit || '', postData.note || '', postData.staff || '']);
+    return _bomJson({ success: true });
+  }
+
   // สร้างคำขออนุมัติ QR (สถานะ pending)
   if (action === 'createPaymentApproval') {
     var sh = getOrCreateSheet(ss, 'PaymentApprovals', ['id', 'timestamp', 'tableNo', 'orderNumber', 'amount', 'requestedBy', 'status', 'approver', 'respondedAt']);
@@ -599,7 +614,7 @@ function doPost(e) {
   }
 
   if (action === 'clearSalesData') {
-    var sheetsToClear = ['Orders', 'TableOrders', 'PaymentSummary', 'PaymentApprovals', 'OutstandingBills', 'Shifts', 'ตัดสต็อก', 'รับวัตถุดิบ', 'LiquorStorage'];
+    var sheetsToClear = ['Orders', 'TableOrders', 'PaymentSummary', 'PaymentApprovals', 'OutstandingBills', 'Shifts', 'ตัดสต็อก', 'รับวัตถุดิบ', 'LiquorStorage', 'Waste'];
     sheetsToClear.forEach(function(name) {
       var sh = ss.getSheetByName(name);
       if (sh && sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);
@@ -952,9 +967,10 @@ function clearSalesAndTransactionsData() {
     'Shifts',
     'ตัดสต็อก',
     'รับวัตถุดิบ',
-    'LiquorStorage'
+    'LiquorStorage',
+    'Waste'
   ];
-  
+
   sheetsToClear.forEach(function(name) {
     var sh = ss.getSheetByName(name);
     if (sh && sh.getLastRow() > 1) {

@@ -307,6 +307,27 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
 
   const menuAdjustment = totalSales - totalMenuRevenue;
 
+  // รายการทิ้งของเสีย (Waste) ในช่วงเวลาเดียวกัน — รวมจำนวนต่อไอเทม + แยกตามสาขา
+  const { wasteRows, wasteTotalQty } = useMemo(() => {
+    const map = {};
+    (data?.waste || []).forEach(w => {
+      const name = String(w.itemName || '').trim();
+      if (!name) return;
+      const branch = String(w.branch || '').trim();
+      if (branchFilter && branch !== branchFilter) return; // เคารพตัวกรองสาขาเหมือนรายงานส่วนอื่น
+      const unit = String(w.unit || '').trim();
+      const key = name + '||' + unit;
+      if (!map[key]) map[key] = { name, unit, qty: 0, branches: {} };
+      const q = Number(w.qty) || 0;
+      map[key].qty += q;
+      if (branch) map[key].branches[branch] = (map[key].branches[branch] || 0) + q;
+    });
+    const rows = Object.values(map)
+      .map(r => ({ ...r, branchText: Object.entries(r.branches).map(([b, q]) => `${b}: ${q}`).join(', ') }))
+      .sort((a, b) => b.qty - a.qty);
+    return { wasteRows: rows, wasteTotalQty: rows.reduce((s, r) => s + r.qty, 0) };
+  }, [data, branchFilter]);
+
   // Filter bills by search query
   const filteredBills = useMemo(() => {
     if (!searchQuery) return bills;
@@ -657,9 +678,30 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
         });
       });
 
+      // ชีตรายการทิ้ง (Waste) — สรุปต่อไอเทม + รายการดิบแยกสาขา/เวลา
+      const wasteSummaryRows = [
+        ['สรุปรายการทิ้ง (Waste)', '', '', ''],
+        ['รวมจำนวนที่ทิ้งทั้งหมด', wasteTotalQty, '', ''],
+        [],
+        ['ลำดับ', 'รายการ', 'จำนวนรวม', 'แยกตามสาขา'],
+        ...wasteRows.map((r, i) => [i + 1, r.name, `${r.qty}${r.unit ? ' ' + r.unit : ''}`, r.branchText || '—']),
+        [],
+        ['รายการทิ้งทั้งหมด (รายตัว)'],
+        ['วันเวลา', 'สาขา', 'รายการ', 'หมวด', 'จำนวน', 'หน่วย', 'หมายเหตุ', 'พนักงาน'],
+        ...[...(data?.waste || [])]
+          .filter(w => !branchFilter || String(w.branch || '').trim() === branchFilter)
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+          .map(w => [
+            (function () { try { return new Date(w.timestamp).toLocaleString('th-TH'); } catch { return w.timestamp; } })(),
+            w.branch || '—', w.itemName || '', w.category || '—',
+            Number(w.qty) || 0, w.unit || '', w.note || '—', w.staff || '—'
+          ]),
+      ];
+
       downloadExcelMultiSheet([
         { name: 'หน้ารวม', headers: ['หัวข้อ', 'รายละเอียด', '', '', ''], rows: summaryRows },
-        { name: 'รายละเอียดบิล', headers: ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'รายละเอียดการชำระเงิน', 'ยอดรวมบิล (บาท)', 'ชื่อรายการอาหาร', 'จำนวน', 'ราคาต่อหน่วย (บาท)', 'ตัวเลือกเสริม/ของในเซ็ต'], rows: detailRows }
+        { name: 'รายละเอียดบิล', headers: ['เลขที่บิล', 'ลูกค้า/โต๊ะ', 'เวลาสั่งซื้อ', 'ช่องทางชำระเงิน', 'รายละเอียดการชำระเงิน', 'ยอดรวมบิล (บาท)', 'ชื่อรายการอาหาร', 'จำนวน', 'ราคาต่อหน่วย (บาท)', 'ตัวเลือกเสริม/ของในเซ็ต'], rows: detailRows },
+        { name: 'รายการทิ้ง Waste', headers: ['', '', '', '', '', '', '', ''], rows: wasteSummaryRows }
       ], `สรุปยอดขาย_${from}_ถึง_${to}`);
     } else if (view === 'drilldown') {
       // บล็อกสรุปสถิติ (ชุดข้อมูลเดียวกับการ์ด "สรุปสถิติการสั่งซื้อ") ไว้ด้านบนไฟล์
@@ -982,6 +1024,42 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
                           <span style={{ color: 'white' }}>รวมยอดขายสุทธิ (Grand Total)</span>
                           <span style={{ color: '#fbbf24', fontSize: '0.9rem' }}>฿{fmt(totalSales)}</span>
                         </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Waste items (รายการทิ้ง) — เน้นสีแดงให้เห็นชัด */}
+                  <div style={{ ...cardStyle, background: 'rgba(239,68,68,0.06)', border: '1.5px solid rgba(239,68,68,0.35)' }}>
+                    <h4 style={{ margin: '0 0 0.85rem 0', fontSize: '0.9rem', fontWeight: 800, borderBottom: '1px solid rgba(239,68,68,0.2)', paddingBottom: '0.5rem', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      🗑️ {lang === 'th' ? 'รายการที่ทิ้ง (Waste)' : 'Wasted Items'}
+                      <span style={{ marginLeft: 'auto', fontSize: '0.82rem', fontWeight: 800 }}>
+                        {lang === 'th' ? 'รวม' : 'Total'} {wasteTotalQty}
+                      </span>
+                    </h4>
+                    {wasteRows.length === 0 ? (
+                      <div style={{ textAlign: 'center', color: 'rgba(239,68,68,0.5)', padding: '0.75rem', fontSize: '0.85rem' }}>
+                        {lang === 'th' ? 'ไม่มีรายการทิ้งในช่วงเวลานี้' : 'No waste recorded during this range'}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '220px', overflowY: 'auto', paddingRight: '4px' }}>
+                        {wasteRows.map((r, i) => (
+                          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', fontSize: '0.88rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                              <span style={{ color: '#fca5a5', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <span style={{ color: 'rgba(239,68,68,0.6)', fontWeight: 'bold', marginRight: '6px' }}>{i + 1}.</span>
+                                {r.name}
+                              </span>
+                              {r.branchText && (
+                                <span style={{ fontSize: '0.72rem', color: 'rgba(248,113,113,0.7)', paddingLeft: '18px' }}>
+                                  🏢 {r.branchText}
+                                </span>
+                              )}
+                            </div>
+                            <span style={{ color: '#ef4444', fontWeight: 900, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                              {r.qty}{r.unit ? ` ${r.unit}` : ''}
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

@@ -27,6 +27,7 @@ const ManageBOM = lazy(() => import('./components/admin/ManageBOM'));
 const Reports = lazy(() => import('./components/admin/Reports'));
 const OutstandingBills = lazy(() => import('./components/OutstandingBills'));
 const LiquorStorage = lazy(() => import('./components/LiquorStorage'));
+const WasteRecord = lazy(() => import('./components/WasteRecord'));
 import { resolvePopupSource, flattenPopupConfig, getPriceOptions } from './utils/popupConfig';
 import './index.css';
 
@@ -962,6 +963,9 @@ function App() {
                   <button className="pos-header-btn" onClick={() => navigate('/table-orders')}>
                     🧾 {lang === 'th' ? 'สรุปบิล' : 'Bill Summary'}
                   </button>
+                  <button className="pos-header-btn" onClick={() => navigate('/waste')} style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.35)', color: '#f87171' }}>
+                    🗑️ {lang === 'th' ? 'ทิ้ง (Waste)' : 'Waste'}
+                  </button>
                   <button className="pos-header-btn" onClick={() => { setSalesSummaryMode('daily'); setShowSalesSummaryModal(true); }} style={{ background: 'rgba(168,85,247,0.15)', border: '1px solid rgba(168,85,247,0.3)', color: '#c084fc' }}>
                     📊 {lang === 'th' ? 'สรุปยอดขายวันนี้' : 'Today Sales'}
                   </button>
@@ -1081,6 +1085,17 @@ function App() {
             currentUser={currentUser}
             lang={lang}
             onBack={() => navigate('/table-select')}
+            menu={allMenu.length > 0 ? allMenu : liveMenu}
+            categories={allCategories.length > 0 ? allCategories : categories}
+          />
+        } />
+
+        <Route path="/waste" element={
+          <WasteRecord
+            currentUser={currentUser}
+            lang={lang}
+            branch={branch}
+            onBack={() => navigate('/index')}
             menu={allMenu.length > 0 ? allMenu : liveMenu}
             categories={allCategories.length > 0 ? allCategories : categories}
           />
