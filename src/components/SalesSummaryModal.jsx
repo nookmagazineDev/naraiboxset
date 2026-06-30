@@ -50,6 +50,14 @@ const parseItemQty = (detail) => {
 // ชื่อสาขา = คอลัม A ของชีต Users (branch) — เผื่อข้อมูลเก่าใช้ id/username แทน
 const branchOf = (u) => String(u?.branch || u?.id || u?.username || '').trim();
 
+// splitDetail ถูกเก็บในชีตเป็น JSON string (JSON.stringify ตอนบันทึก) — แปลงกลับเป็น object
+// ก่อนใช้ ไม่งั้นการแยกประเภทเงินสด/โอน/บัตร จะไม่ถูกดึงมาคำนวณเลย
+const parseSplitDetail = (sd) => {
+  if (!sd) return null;
+  if (typeof sd === 'object') return sd;
+  try { return JSON.parse(sd); } catch { return null; }
+};
+
 const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], categories = [], isAdmin = false, branch = '', users = [], onClose }) => {
   const todayStr = getThaiTodayStr();
 
@@ -165,7 +173,7 @@ const SalesSummaryModal = ({ lang = 'th', initialMode = 'daily', allMenu = [], c
           timestamp: r.Timestamp,
           status: r.Status,
           paymentMethod: payMap[r.OrderNumber]?.paymentMethod || 'ไม่ระบุ',
-          splitDetail: payMap[r.OrderNumber]?.splitDetail || null,
+          splitDetail: parseSplitDetail(payMap[r.OrderNumber]?.splitDetail),
           items: []
         };
       }

@@ -12,6 +12,13 @@ const TABS = [
   { key: 'shift',   label: 'รายงานปิดกะ',         icon: <Clock     size={15} /> },
 ];
 
+// splitDetail ถูกเก็บในชีตเป็น JSON string — แปลงกลับเป็น object ก่อนใช้แยกประเภทเงิน
+const parseSplitDetail = (sd) => {
+  if (!sd) return null;
+  if (typeof sd === 'object') return sd;
+  try { return JSON.parse(sd); } catch { return null; }
+};
+
 const TODAY = new Date().toISOString().slice(0, 10);
 const D7    = new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10);
 
@@ -132,7 +139,7 @@ export default function Reports({ allMenu = [], isAdmin = false, branch = '', us
       orderMap[r.OrderNumber] = {
         orderNumber: r.OrderNumber, customerName: r.CustomerName,
         total: Number(r.TotalAmount) || 0, timestamp: r.Timestamp,
-        status: r.Status, paymentMethod: payMap[r.OrderNumber]?.paymentMethod || '—', splitDetail: payMap[r.OrderNumber]?.splitDetail || null, staff: r.RecordedBy || '',
+        status: r.Status, paymentMethod: payMap[r.OrderNumber]?.paymentMethod || '—', splitDetail: parseSplitDetail(payMap[r.OrderNumber]?.splitDetail), staff: r.RecordedBy || '',
       };
     }
   });
