@@ -70,6 +70,10 @@ function App() {
   });
   const [shiftModalMode, setShiftModalMode] = useState(null); // null | 'open' | 'close'
 
+  // แจ้งเตือนเมื่อบันทึกบิล/การชำระเงินขึ้น Google Sheet ไม่สำเร็จ (เน็ตหลุด/แบ็กเอนด์ error)
+  // — กันเคส payment หายเงียบ ๆ แบบช่วงบิล #233–#296 ที่ผ่านมา
+  const [saveAlert, setSaveAlert] = useState('');
+
   const handleOpenShift = async (openCash) => {
     try {
       await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'openShift', staff: currentUser?.username || '', openCash }) });
@@ -670,28 +674,41 @@ function App() {
     setTableNumber('1');
     navigate('/index');
 
+    // Save to Orders sheet + payment record ในคำขอเดียว (atomic) — กันบิลขึ้นแต่ payment หาย
+    // ใช้ fetch แบบอ่าน response ได้ (ไม่ใช้ no-cors) เพื่อ "ตรวจจับ" ว่าบันทึกสำเร็จจริงหรือไม่
+    // GAS /exec ตอบ 302 → 200 พร้อม Access-Control-Allow-Origin:* จึงอ่านผลข้าม origin ได้ปลอดภัย
+    const orderPayload = {
+      action: 'insertOrder',
+      rows: rowsToSend,
+      payment: {
+        orderNumber: newOrderNumber,
+        tableNo: String(tableNumber),
+        paymentMethod,
+        grandTotal: finalTotal,
+        staff: currentUser?.username || '',
+        shiftId: currentShift?.id || '',
+        splitDetail: paymentDetails ? JSON.stringify(paymentDetails) : ''
+      }
+    };
     try {
-      // Save to Orders sheet + payment record ในคำขอเดียว (atomic) — กันบิลขึ้นแต่ payment หาย
-      await fetch(GAS_URL, {
+      const res = await fetch(GAS_URL, {
         method: 'POST',
-        mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          action: 'insertOrder',
-          rows: rowsToSend,
-          payment: {
-            orderNumber: newOrderNumber,
-            tableNo: String(tableNumber),
-            paymentMethod,
-            grandTotal: finalTotal,
-            staff: currentUser?.username || '',
-            shiftId: currentShift?.id || '',
-            splitDetail: paymentDetails ? JSON.stringify(paymentDetails) : ''
-          }
-        })
+        body: JSON.stringify(orderPayload)
       });
+      const json = await res.json().catch(() => null);
+      if (!json || json.success !== true) {
+        throw new Error(json && json.error ? json.error : 'backend ไม่ตอบ success');
+      }
     } catch (error) {
       console.error('Error saving order:', error);
+      // เก็บบิลที่บันทึกไม่สำเร็จไว้ในเครื่อง เพื่อไม่ให้ข้อมูลหาย + ให้ retry/ตรวจสอบภายหลังได้
+      try {
+        const pending = JSON.parse(localStorage.getItem('pending_orders') || '[]');
+        pending.push({ payload: orderPayload, at: new Date().toISOString(), error: String(error.message || error) });
+        localStorage.setItem('pending_orders', JSON.stringify(pending));
+      } catch {}
+      setSaveAlert(`⚠️ บันทึกบิล ${newOrderNumber} (${paymentMethod}) ขึ้นระบบไม่สำเร็จ! ข้อมูลถูกสำรองไว้ในเครื่องแล้ว — กรุณาเช็กอินเทอร์เน็ตแล้วแจ้งแอดมิน`);
     }
 
     try {
@@ -885,6 +902,22 @@ function App() {
 
   return (
     <div className="app-container">
+      {saveAlert && (
+        <div
+          onClick={() => setSaveAlert('')}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 5000,
+            background: '#dc2626', color: 'white', padding: '0.85rem 1.25rem',
+            fontSize: '0.9rem', fontWeight: 700, textAlign: 'center', cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.4)', lineHeight: 1.4
+          }}
+        >
+          {saveAlert}
+          <div style={{ fontSize: '0.72rem', fontWeight: 500, opacity: 0.85, marginTop: '2px' }}>
+            (แตะเพื่อปิด)
+          </div>
+        </div>
+      )}
       <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>{lang === 'th' ? 'กำลังโหลด...' : 'Loading...'}</div>}>
       <Routes>
         <Route path="/" element={<Navigate to="/index" replace />} />
