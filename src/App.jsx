@@ -247,9 +247,14 @@ function App() {
     const map = posSettings?.branchQR;
     const bq = map && typeof map === 'object' ? map[branch] : null;
     if (!bq) return posSettings;
-    const QR_FIELDS = ['qrType', 'kshopRawPayload', 'qrShopName', 'qrAccountName', 'promptPayId', 'staticQrUrl'];
     const override = {};
-    QR_FIELDS.forEach(k => { if (bq[k] !== undefined && bq[k] !== '') override[k] = bq[k]; });
+    ['qrType', 'kshopRawPayload', 'promptPayId', 'staticQrUrl'].forEach(k => {
+      if (bq[k] !== undefined && bq[k] !== '') override[k] = bq[k];
+    });
+    // ชื่อร้าน/บัญชีของสาขานี้ — ถ้าสาขาไม่ได้กรอกชื่อร้าน ให้โชว์ชื่อสาขาแทน
+    // (กันไม่ให้ fallback ไปโชว์ชื่อร้านกลางที่เป็นของอีกสาขา)
+    override.qrShopName = bq.qrShopName || branch;
+    if (bq.qrAccountName) override.qrAccountName = bq.qrAccountName;
     return { ...posSettings, ...override };
   }, [posSettings, branch]);
 
