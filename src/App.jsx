@@ -241,6 +241,18 @@ function App() {
     return () => window.removeEventListener('pos_settings_changed', handler);
   }, []);
 
+  // settings ที่ใช้จริงตอนเช็คบิล = ค่ากลาง + ทับด้วย QR เฉพาะสาขาที่ล็อกอินอยู่ (ถ้ามีตั้งไว้)
+  // เก็บใน posSettings.branchQR[ชื่อสาขา] — ไม่มีของสาขานั้น จะ fallback ใช้ QR กลาง
+  const checkoutSettings = React.useMemo(() => {
+    const map = posSettings?.branchQR;
+    const bq = map && typeof map === 'object' ? map[branch] : null;
+    if (!bq) return posSettings;
+    const QR_FIELDS = ['qrType', 'kshopRawPayload', 'qrShopName', 'qrAccountName', 'promptPayId', 'staticQrUrl'];
+    const override = {};
+    QR_FIELDS.forEach(k => { if (bq[k] !== undefined && bq[k] !== '') override[k] = bq[k]; });
+    return { ...posSettings, ...override };
+  }, [posSettings, branch]);
+
   // POS Discounts
   const [posDiscounts, setPosDiscounts] = useState(() => {
     try { return JSON.parse(localStorage.getItem('pos_discounts') || '[]'); } catch { return []; }
@@ -1187,7 +1199,7 @@ function App() {
           <Route path="users" element={isAdmin ? <ManageUsers /> : <Navigate to="/admin" replace />} />
           <Route path="promotions" element={<ManagePromotions />} />
           <Route path="printers" element={isAdmin ? <ManagePrinters /> : <Navigate to="/admin" replace />} />
-          <Route path="settings" element={isAdmin ? <ManageSettings /> : <Navigate to="/admin" replace />} />
+          <Route path="settings" element={isAdmin ? <ManageSettings users={users} /> : <Navigate to="/admin" replace />} />
           <Route path="bom" element={isAdmin ? <ManageBOM /> : <Navigate to="/admin" replace />} />
           <Route path="stock" element={<ManageStock />} />
           <Route path="reports" element={(isAdmin || isCashier) ? <Reports allMenu={allMenu} isAdmin={isAdmin} branch={branch} users={users} /> : <Navigate to="/admin" replace />} />
@@ -1257,7 +1269,7 @@ function App() {
             orderNumber={`#${String(maxOrderNum + 1).padStart(3, '0')}`}
             onClose={() => setIsCheckoutOpen(false)}
             onComplete={handleCheckoutComplete}
-            settings={posSettings}
+            settings={checkoutSettings}
             discounts={posDiscounts}
             users={users}
             currentUser={currentUser}

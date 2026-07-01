@@ -13,7 +13,44 @@ const DEFAULT_SETTINGS = {
   staticQrUrl: '/kshop_qr.png',
   kshopRawPayload: '',
   qrShopName: '',
-  qrAccountName: ''
+  qrAccountName: '',
+  branchQR: {} // { [ชื่อสาขา]: { qrType, kshopRawPayload, qrShopName, qrAccountName, promptPayId, staticQrUrl } }
+};
+
+// ชื่อสาขา = คอลัม branch ของชีต Users (เผื่อข้อมูลเก่าใช้ id/username)
+const branchOf = (u) => String(u?.branch || u?.id || u?.username || '').trim();
+
+// ถอดรหัส QR จากไฟล์ภาพ → payload EMVCo (คืนผ่าน onOk / ข้อความ error ผ่าน onErr)
+const decodeQrImage = (file, onOk, onErr) => {
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      try {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        if (code && code.data) {
+          if (!code.data.startsWith('000201')) {
+            onErr('QR Code นี้ไม่ใช่รูปแบบมาตรฐานพร้อมเพย์หรือ Thai QR (ไม่ขึ้นต้นด้วย 000201) กรุณาตรวจสอบรูปภาพครับ');
+            return;
+          }
+          onOk(code.data);
+        } else {
+          onErr('ไม่สามารถถอดรหัส QR Code จากรูปนี้ได้ กรุณาครอปภาพให้เห็นเฉพาะใบ QR หรือใช้รูปสกรีนช็อตที่ชัดเจนกว่านี้ครับ');
+        }
+      } catch (err) {
+        onErr('เกิดข้อผิดพลาดในการอ่านไฟล์ภาพ: ' + err.message);
+      }
+    };
+    img.onerror = () => onErr('ไม่สามารถโหลดไฟล์ภาพนี้ได้ กรุณาลองใหม่อีกครั้ง');
+    img.src = event.target.result;
+  };
+  reader.readAsDataURL(file);
 };
 
 const ToggleBtn = ({ checked, onChange }) => (
@@ -25,10 +62,13 @@ const ToggleBtn = ({ checked, onChange }) => (
   </button>
 );
 
-const ManageSettings = () => {
+const ManageSettings = ({ users = [] }) => {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  // สาขาที่กำลังตั้งค่า QR แยก + error ของการอัปโหลดรูปสาขานั้น
+  const [branchTab, setBranchTab] = useState('');
+  const [branchUploadError, setBranchUploadError] = useState('');
 
   useEffect(() => {
     const stored = localStorage.getItem('pos_settings');
@@ -36,6 +76,56 @@ const ManageSettings = () => {
       try { setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(stored) }); } catch (e) {}
     }
   }, []);
+
+  // รายชื่อสาขาจากชีต Users (ไม่ซ้ำ)
+  const branchList = React.useMemo(() => {
+    const set = new Set();
+    (users || []).forEach(u => { const b = branchOf(u); if (b) set.add(b); });
+    return Array.from(set).sort();
+  }, [users]);
+
+  // QR ของสาขาที่เลือกอยู่ (อ่านจาก settings.branchQR)
+  const branchQRMap = settings.branchQR && typeof settings.branchQR === 'object' ? settings.branchQR : {};
+  const curBranchQR = (branchTab && branchQRMap[branchTab]) || {};
+
+  // อัปเดตค่า QR ของสาขาที่เลือก
+  const updateBranchQR = (field, value) => {
+    if (!branchTab) return;
+    setSettings(prev => {
+      const map = prev.branchQR && typeof prev.branchQR === 'object' ? prev.branchQR : {};
+      return { ...prev, branchQR: { ...map, [branchTab]: { ...(map[branchTab] || {}), [field]: value } } };
+    });
+    setSaved(false);
+  };
+
+  // ลบ QR เฉพาะสาขา (กลับไปใช้ค่ากลาง)
+  const clearBranchQR = () => {
+    if (!branchTab) return;
+    setSettings(prev => {
+      const map = { ...(prev.branchQR && typeof prev.branchQR === 'object' ? prev.branchQR : {}) };
+      delete map[branchTab];
+      return { ...prev, branchQR: map };
+    });
+    setSaved(false);
+    setBranchUploadError('');
+  };
+
+  const handleBranchQrUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBranchUploadError('');
+    decodeQrImage(
+      file,
+      (payload) => {
+        setSettings(prev => {
+          const map = prev.branchQR && typeof prev.branchQR === 'object' ? prev.branchQR : {};
+          return { ...prev, branchQR: { ...map, [branchTab]: { ...(map[branchTab] || {}), kshopRawPayload: payload, qrType: 'kshop_dynamic' } } };
+        });
+        setSaved(false);
+      },
+      (msg) => setBranchUploadError(msg)
+    );
+  };
 
   const handleSave = () => {
     localStorage.setItem('pos_settings', JSON.stringify(settings));
@@ -58,45 +148,15 @@ const ManageSettings = () => {
   const handleQrUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setUploadError('');
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        
-        try {
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height);
-          if (code && code.data) {
-            if (!code.data.startsWith('000201')) {
-              setUploadError('QR Code นี้ไม่ใช่รูปแบบมาตรฐานพร้อมเพย์หรือ Thai QR (ไม่ขึ้นต้นด้วย 000201) กรุณาตรวจสอบรูปภาพครับ');
-              return;
-            }
-            setSettings(prev => ({
-              ...prev,
-              kshopRawPayload: code.data,
-              qrType: 'kshop_dynamic'
-            }));
-            setSaved(false);
-          } else {
-            setUploadError('ไม่สามารถถอดรหัส QR Code จากรูปนี้ได้ กรุณาครอปภาพให้เห็นเฉพาะใบ QR หรือใช้รูปสกรีนช็อตที่ชัดเจนกว่านี้ครับ');
-          }
-        } catch (err) {
-          setUploadError('เกิดข้อผิดพลาดในการอ่านไฟล์ภาพ: ' + err.message);
-        }
-      };
-      img.onerror = () => {
-        setUploadError('ไม่สามารถโหลดไฟล์ภาพนี้ได้ กรุณาลองใหม่อีกครั้ง');
-      };
-      img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
+    decodeQrImage(
+      file,
+      (payload) => {
+        setSettings(prev => ({ ...prev, kshopRawPayload: payload, qrType: 'kshop_dynamic' }));
+        setSaved(false);
+      },
+      (msg) => setUploadError(msg)
+    );
   };
 
   const decodedDetails = parseKShopPayload(settings.kshopRawPayload);
@@ -362,6 +422,145 @@ const ManageSettings = () => {
               💡 หากใช้ไฟล์รูปภาพของ K Shop กรุณาเซฟรูปเป็นชื่อ <strong>kshop_qr.png</strong> แล้วนำไปวางไว้ที่โฟลเดอร์ <strong>public</strong> ของโปรเจกต์นี้
             </p>
           </div>
+        )}
+      </div>
+
+      {/* QR แยกตามสาขา Card */}
+      <div style={{ background: 'rgba(124,58,237,0.05)', border: '1px solid rgba(124,58,237,0.25)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <div style={{ marginBottom: '1rem' }}>
+          <h3 style={{ color: 'white', margin: '0 0 0.3rem', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <QrCode size={18} color="#c084fc" /> QR ชำระเงินแยกตามสาขา
+          </h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', margin: 0 }}>
+            ตั้ง QR เฉพาะของแต่ละสาขา — ตอนเช็คบิลระบบจะใช้ QR ของสาขาที่ล็อกอินอยู่ ถ้าสาขาไหนไม่ได้ตั้ง จะใช้ QR กลางด้านบนแทน
+          </p>
+        </div>
+
+        {branchList.length === 0 ? (
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', background: 'rgba(0,0,0,0.2)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+            ยังไม่มีข้อมูลสาขา (เพิ่มสาขาได้ที่หน้า "จัดการผู้ใช้" โดยกรอกช่องสาขาให้ผู้ใช้แต่ละคน)
+          </div>
+        ) : (
+          <>
+            {/* เลือกสาขา */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <label style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: 700 }}>เลือกสาขา:</label>
+              <select
+                value={branchTab}
+                onChange={(e) => { setBranchTab(e.target.value); setBranchUploadError(''); }}
+                style={{ flex: 1, minWidth: '180px', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: 'white', padding: '0.5rem 0.7rem', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none' }}
+              >
+                <option value="">— เลือกสาขาที่ต้องการตั้ง QR —</option>
+                {branchList.map(b => (
+                  <option key={b} value={b}>{b}{branchQRMap[b] ? '  ✅ (ตั้งแล้ว)' : ''}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* สรุปสาขาที่ตั้ง QR แล้ว */}
+            {Object.keys(branchQRMap).length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1rem' }}>
+                {Object.keys(branchQRMap).map(b => (
+                  <span key={b} style={{ fontSize: '0.75rem', fontWeight: 700, color: '#c084fc', background: 'rgba(192,132,252,0.12)', border: '1px solid rgba(192,132,252,0.3)', borderRadius: 20, padding: '0.2rem 0.65rem' }}>
+                    {b}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {branchTab && (
+              <div style={{ borderTop: '1px dashed rgba(255,255,255,0.12)', paddingTop: '1rem' }}>
+                {/* QR type ของสาขา */}
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                  {[
+                    { key: 'kshop_dynamic', label: 'K Shop (Dynamic) ⭐', color: '#22c55e' },
+                    { key: 'dynamic', label: 'พร้อมเพย์ทั่วไป', color: '#60a5fa' },
+                    { key: 'static', label: 'รูปภาพนิ่ง', color: '#facc15' }
+                  ].map(t => {
+                    const active = (curBranchQR.qrType || 'kshop_dynamic') === t.key;
+                    return (
+                      <button
+                        key={t.key}
+                        onClick={() => updateBranchQR('qrType', t.key)}
+                        style={{ flex: '1 1 30%', minWidth: '110px', padding: '0.6rem', borderRadius: 10, background: active ? `${t.color}22` : 'rgba(0,0,0,0.25)', border: active ? `1px solid ${t.color}` : '1px solid rgba(255,255,255,0.1)', color: active ? t.color : 'var(--text-muted)', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: 'inherit' }}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {(curBranchQR.qrType || 'kshop_dynamic') === 'kshop_dynamic' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.65rem 1rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: 'white', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700, alignSelf: 'flex-start' }}>
+                      <Upload size={16} /> อัปโหลดรูป QR K Shop ของสาขา {branchTab}
+                      <input type="file" accept="image/*" onChange={handleBranchQrUpload} style={{ display: 'none' }} />
+                    </label>
+
+                    {curBranchQR.kshopRawPayload ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#22c55e', fontSize: '0.85rem', fontWeight: 600 }}>
+                        <CheckCircle2 size={16} /> ตรวจสอบบัญชี K Shop ของสาขานี้สำเร็จ
+                        {(() => { const d = parseKShopPayload(curBranchQR.kshopRawPayload); return d?.ref2 ? <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>({d.ref2})</span> : null; })()}
+                      </div>
+                    ) : (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>ยังไม่ได้เพิ่มรูป QR ของสาขานี้</div>
+                    )}
+
+                    {branchUploadError && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#ef4444', fontSize: '0.82rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, padding: '0.5rem 0.75rem' }}>
+                        <AlertTriangle size={15} style={{ flexShrink: 0 }} /><span>{branchUploadError}</span>
+                      </div>
+                    )}
+
+                    <input
+                      type="text"
+                      value={curBranchQR.qrShopName || ''}
+                      onChange={(e) => updateBranchQR('qrShopName', e.target.value)}
+                      placeholder="ชื่อร้านที่แสดงบนการ์ด QR (เช่น NARAI -KHANOY CENTURY)"
+                      style={{ width: '100%', padding: '0.55rem 0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                    <input
+                      type="text"
+                      value={curBranchQR.qrAccountName || ''}
+                      onChange={(e) => updateBranchQR('qrAccountName', e.target.value)}
+                      placeholder="ชื่อบัญชีรับเงิน (เช่น บจก. นารายณ์ พิซเซอเรีย)"
+                      style={{ width: '100%', padding: '0.55rem 0.75rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, color: 'white', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                )}
+
+                {curBranchQR.qrType === 'dynamic' && (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={curBranchQR.promptPayId || ''}
+                    onChange={(e) => updateBranchQR('promptPayId', e.target.value.replace(/[^0-9]/g, ''))}
+                    placeholder="หมายเลขพร้อมเพย์ของสาขา (เช่น 0812345678)"
+                    style={{ width: '100%', padding: '0.7rem 0.9rem', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, color: 'white', fontSize: '1rem', fontWeight: 700, letterSpacing: '0.04em', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                )}
+
+                {curBranchQR.qrType === 'static' && (
+                  <input
+                    type="text"
+                    value={curBranchQR.staticQrUrl || ''}
+                    onChange={(e) => updateBranchQR('staticQrUrl', e.target.value)}
+                    placeholder="พาธ/ลิงก์รูป QR ของสาขา (เช่น /kshop_qr_center.png)"
+                    style={{ width: '100%', padding: '0.7rem 0.9rem', background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, color: 'white', fontSize: '1rem', fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                )}
+
+                {branchQRMap[branchTab] && (
+                  <button
+                    onClick={clearBranchQR}
+                    style={{ marginTop: '1rem', padding: '0.5rem 1rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, color: '#ef4444', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    🗑️ ลบ QR สาขานี้ (กลับไปใช้ QR กลาง)
+                  </button>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
