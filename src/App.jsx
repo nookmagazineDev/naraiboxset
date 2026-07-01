@@ -72,7 +72,8 @@ function App() {
 
   // แจ้งเตือนเมื่อบันทึกบิล/การชำระเงินขึ้น Google Sheet ไม่สำเร็จ (เน็ตหลุด/แบ็กเอนด์ error)
   // — กันเคส payment หายเงียบ ๆ แบบช่วงบิล #233–#296 ที่ผ่านมา
-  const [saveAlert, setSaveAlert] = useState('');
+  // ค่า: null | { type: 'error' | 'success', msg: string }
+  const [saveAlert, setSaveAlert] = useState(null);
 
   const handleOpenShift = async (openCash) => {
     try {
@@ -172,6 +173,50 @@ function App() {
   }, [tableNumber]);
 
   const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3XyaHUni23zgFET3q7ATSpBTzftfNX7ILvbEYbG134KAl/exec';
+
+  // ── Retry บิลที่ค้างใน localStorage (pending_orders) ──
+  // เรียกตอนเปิดแอปและเมื่อเน็ตกลับมา — ส่งซ้ำเฉพาะที่ backend ยังไม่ตอบ success
+  const flushingRef = React.useRef(false);
+  const flushPendingOrders = React.useCallback(async () => {
+    if (flushingRef.current) return; // กันรันซ้อน (mount + online event)
+    let pending;
+    try { pending = JSON.parse(localStorage.getItem('pending_orders') || '[]'); } catch { pending = []; }
+    if (!Array.isArray(pending) || pending.length === 0) return;
+
+    flushingRef.current = true;
+    const stillPending = [];
+    for (const entry of pending) {
+      try {
+        const res = await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(entry.payload)
+        });
+        const json = await res.json().catch(() => null);
+        if (!json || json.success !== true) throw new Error('retry failed');
+      } catch {
+        stillPending.push(entry); // ยังส่งไม่ได้ เก็บไว้รอบหน้า
+      }
+    }
+    localStorage.setItem('pending_orders', JSON.stringify(stillPending));
+    flushingRef.current = false;
+
+    const sent = pending.length - stillPending.length;
+    if (sent > 0) {
+      if (stillPending.length === 0) {
+        setSaveAlert({ type: 'success', msg: `✅ ส่งบิลที่ค้าง ${sent} รายการขึ้นระบบสำเร็จแล้ว` });
+        setTimeout(() => setSaveAlert(cur => (cur && cur.type === 'success' ? null : cur)), 5000);
+      } else {
+        setSaveAlert({ type: 'error', msg: `⚠️ ส่งบิลค้างได้ ${sent} รายการ เหลืออีก ${stillPending.length} รายการที่ยังส่งไม่ได้ — กรุณาเช็กอินเทอร์เน็ต` });
+      }
+    }
+  }, [GAS_URL]);
+
+  React.useEffect(() => {
+    flushPendingOrders();
+    window.addEventListener('online', flushPendingOrders);
+    return () => window.removeEventListener('online', flushPendingOrders);
+  }, [flushPendingOrders]);
 
   const [orders, setOrders] = useState([]);
   const [maxOrderNum, setMaxOrderNum] = useState(0);
@@ -708,7 +753,7 @@ function App() {
         pending.push({ payload: orderPayload, at: new Date().toISOString(), error: String(error.message || error) });
         localStorage.setItem('pending_orders', JSON.stringify(pending));
       } catch {}
-      setSaveAlert(`⚠️ บันทึกบิล ${newOrderNumber} (${paymentMethod}) ขึ้นระบบไม่สำเร็จ! ข้อมูลถูกสำรองไว้ในเครื่องแล้ว — กรุณาเช็กอินเทอร์เน็ตแล้วแจ้งแอดมิน`);
+      setSaveAlert({ type: 'error', msg: `⚠️ บันทึกบิล ${newOrderNumber} (${paymentMethod}) ขึ้นระบบไม่สำเร็จ! ข้อมูลถูกสำรองไว้ในเครื่องแล้ว — จะลองส่งซ้ำอัตโนมัติเมื่อเน็ตกลับมา` });
     }
 
     try {
@@ -904,15 +949,16 @@ function App() {
     <div className="app-container">
       {saveAlert && (
         <div
-          onClick={() => setSaveAlert('')}
+          onClick={() => setSaveAlert(null)}
           style={{
             position: 'fixed', top: 0, left: 0, right: 0, zIndex: 5000,
-            background: '#dc2626', color: 'white', padding: '0.85rem 1.25rem',
+            background: saveAlert.type === 'success' ? '#16a34a' : '#dc2626',
+            color: 'white', padding: '0.85rem 1.25rem',
             fontSize: '0.9rem', fontWeight: 700, textAlign: 'center', cursor: 'pointer',
             boxShadow: '0 4px 20px rgba(0,0,0,0.4)', lineHeight: 1.4
           }}
         >
-          {saveAlert}
+          {saveAlert.msg}
           <div style={{ fontSize: '0.72rem', fontWeight: 500, opacity: 0.85, marginTop: '2px' }}>
             (แตะเพื่อปิด)
           </div>
