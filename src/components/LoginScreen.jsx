@@ -22,7 +22,12 @@ const LoginScreen = ({ users, onLogin, lang, onRetry }) => {
   const handleUserSelect = (user) => { setSelectedUser(user); setPassword(''); setError(''); };
 
   const verifyLogin = (entered) => {
-    if (String(selectedUser.pin) === String(entered)) {
+    const stored = String(selectedUser.pin ?? '');
+    const typed = String(entered);
+    // รหัสที่บันทึกก่อนแก้ชีตอาจถูกแปลงเป็นตัวเลขจนเลข 0 ข้างหน้าหาย (0123 → 123)
+    // ให้พิมพ์รหัสเดิมแบบมี 0 นำหน้าได้ (ค่าในชีตต้องเป็นตัวเลขล้วนที่ไม่ขึ้นต้นด้วย 0)
+    const legacyNumeric = /^(0|[1-9]\d*)$/.test(stored) && /^0\d+$/.test(typed) && typed.replace(/^0+(?=\d)/, '') === stored;
+    if (stored === typed || legacyNumeric) {
       onLogin(selectedUser);
     } else {
       setError(lang === 'th' ? 'รหัสผ่านไม่ถูกต้อง' : 'Invalid password');

@@ -596,13 +596,16 @@ function doPost(e) {
   }
 
   if (action === 'saveUsers') {
-    var sheet = ss.getSheetByName('Users');
+    var sheet = getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout', 'isAdmin', 'isCashier', 'branch']);
     sheet.clearContents();
     sheet.appendRow(['id', 'username', 'pin', 'canCheckout', 'isAdmin', 'isCashier', 'branch']);
-    (postData.users || []).forEach(function(u) {
-      sheet.appendRow([u.id||Date.now().toString(), u.username||'', u.pin||'', u.canCheckout!==false, (u.isAdmin===true || u.isAdmin==='TRUE'), (u.isCashier===true || u.isCashier==='TRUE'), u.branch||'']);
+    var userRows = (postData.users || []).map(function(u) {
+      return [u.id||Date.now().toString(), u.username||'', String(u.pin == null ? '' : u.pin), u.canCheckout!==false, (u.isAdmin===true || u.isAdmin==='TRUE'), (u.isCashier===true || u.isCashier==='TRUE'), u.branch||''];
     });
-    return _bomJson({ success: true });
+    // คอลัมน์ pin เก็บเป็นข้อความ — กันรหัสที่ขึ้นต้นด้วย 0 (เช่น 0123) ถูกแปลงเป็นตัวเลข 123
+    sheet.getRange('C:C').setNumberFormat('@');
+    if (userRows.length) sheet.getRange(2, 1, userRows.length, userRows[0].length).setValues(userRows);
+    return _bomJson({ success: true, saved: (postData.users || []).length });
   }
 
   if (action === 'resetAllSheetData') {

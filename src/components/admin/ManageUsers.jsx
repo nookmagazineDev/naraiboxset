@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus, Edit2, Trash2, Save, X, Users, Eye, EyeOff, ShieldCheck, ShieldOff, CheckCircle } from 'lucide-react';
 
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwEGa7KC8W8FiQutWl84FL3XyaHUni23zgFET3q7ATSpBTzftfNX7ILvbEYbG134KAl/exec';
@@ -24,8 +24,42 @@ const ROLE_OPTIONS = [
   { key: 'staff',   label: 'พนักงานทั่วไป', color: '#9ca3af', bg: 'rgba(255,255,255,0.06)', bd: 'rgba(255,255,255,0.2)' },
 ];
 
+// ดึงรายชื่อพนักงานล่าสุดจากชีต Users (ไม่ใช้ cache ในเครื่อง) + อัปเดต cache ให้หน้าอื่นใช้ต่อ
+const fetchServerUsers = async () => {
+  const resp = await fetch(GAS_URL + '?action=getAllData', { cache: 'no-store' });
+  const text = await resp.text();
+  let data = null;
+  try { data = JSON.parse(text); } catch {}
+  if (!data || !Array.isArray(data.users)) throw new Error('อ่านรายชื่อพนักงานจาก Google Sheet ไม่ได้');
+  try {
+    localStorage.setItem('gas_all_data', text);
+    localStorage.setItem('cached_users', JSON.stringify(data.users));
+    window.dispatchEvent(new Event('appDataChanged'));
+  } catch {}
+  return data.users;
+};
+
+// รวมการแก้ไขในหน้านี้เข้ากับรายชื่อล่าสุดบนชีต — พนักงานที่เครื่องอื่นเพิ่ม/แก้ไว้จะไม่ถูกเขียนทับ
+// base = รายชื่อที่โหลดมาตอนเปิดหน้า (ตัวที่ยังไม่ถูกแก้ จะเป็น object เดิมจาก base)
+const mergeWithServer = (local, base, server) => {
+  const baseById  = new Map(base.map(u => [String(u.id), u]));
+  const localById = new Map(local.map(u => [String(u.id), u]));
+  const deleted   = new Set([...baseById.keys()].filter(id => !localById.has(id)));
+  const edited    = new Set(local.filter(u => baseById.has(String(u.id)) && baseById.get(String(u.id)) !== u).map(u => String(u.id)));
+  const merged = server
+    .filter(u => !deleted.has(String(u.id)))
+    .map(u => edited.has(String(u.id)) ? localById.get(String(u.id)) : u);
+  const mergedIds = new Set(merged.map(u => String(u.id)));
+  local.forEach(u => {
+    const id = String(u.id);
+    if (!baseById.has(id) && !mergedIds.has(id)) merged.push(u); // พนักงานที่เพิ่มใหม่
+  });
+  return { merged, deleted };
+};
+
 export default function ManageUsers() {
   const [users,     setUsers]     = useState([]);
+  const [baseUsers, setBaseUsers] = useState([]);    // รายชื่อจากชีตล่าสุด ใช้หาว่าในหน้านี้แก้อะไรไป
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
   const [saveMsg,   setSaveMsg]   = useState('');
@@ -34,17 +68,24 @@ export default function ManageUsers() {
   const [form,      setForm]      = useState(EMPTY_USER);
   const [showPin,   setShowPin]   = useState({});     // { [id]: bool }
   const [dirty,     setDirty]     = useState(false);
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
+    // แสดงจาก cache ก่อน แล้วโหลดรายชื่อจริงจากชีตทับ (ถ้ายังไม่ได้เริ่มแก้)
     const raw = localStorage.getItem('gas_all_data');
     if (raw) {
-      try { const d = JSON.parse(raw); if (d.users) setUsers(d.users); }
+      try { const d = JSON.parse(raw); if (d.users) { setUsers(d.users); setBaseUsers(d.users); } }
       catch (e) {}
     }
     setLoading(false);
+    let alive = true;
+    fetchServerUsers()
+      .then(list => { if (alive && !dirtyRef.current) { setUsers(list); setBaseUsers(list); } })
+      .catch(() => {});
+    return () => { alive = false; };
   }, []);
 
-  const markDirty = () => setDirty(true);
+  const markDirty = () => { dirtyRef.current = true; setDirty(true); };
 
   const handleChange = (id, field, value) => {
     setUsers(prev => prev.map(u => u.id === id ? { ...u, [field]: value } : u));
@@ -67,33 +108,61 @@ export default function ManageUsers() {
     setShowModal(true);
   };
 
+  // บันทึกลงชีต: ดึงรายชื่อล่าสุด → รวมการแก้ไข → ส่งบันทึก → โหลดกลับมาเช็คว่าลงชีตจริง
+  const persist = async (localList) => {
+    setSaving(true); setSaveMsg('');
+    try {
+      const server = await fetchServerUsers();
+      const { merged, deleted } = mergeWithServer(localList, baseUsers, server);
+      const clean = merged.map(({ isNew, ...u }) => u);
+
+      // อ่านคำตอบจาก Apps Script ได้ (ไม่ใช้ no-cors) — ถ้าอ่านไม่ได้จะไปเช็คจากชีตด้านล่างแทน
+      let postError = '';
+      try {
+        const resp = await fetch(GAS_URL, {
+          method: 'POST', headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'saveUsers', users: clean }),
+        });
+        const text = await resp.text();
+        let result = null;
+        try { result = JSON.parse(text); } catch {}
+        if (!result) postError = 'Apps Script ตอบกลับผิดรูปแบบ (อาจยังไม่ได้ Deploy เวอร์ชันล่าสุด)';
+        else if (result.success === false) postError = result.error || 'Apps Script แจ้งว่าบันทึกไม่สำเร็จ';
+      } catch (e) {}
+
+      // ยืนยันจากชีตจริงว่าข้อมูลลงแล้ว
+      const after = await fetchServerUsers();
+      const afterById = new Map(after.map(u => [String(u.id), u]));
+      const ok = clean.every(u => afterById.has(String(u.id)) && String(afterById.get(String(u.id)).username) === String(u.username))
+        && [...deleted].every(id => !afterById.has(id));
+      if (!ok) throw new Error(postError || 'ข้อมูลไม่ลง Google Sheet (ตรวจสอบชีต Users และการ Deploy Apps Script)');
+
+      setUsers(after); setBaseUsers(after);
+      dirtyRef.current = false; setDirty(false);
+      setEditId(null); setSaveMsg('✅ บันทึกลง Google Sheet แล้ว');
+      setTimeout(() => setSaveMsg(''), 3000);
+      return true;
+    } catch (e) {
+      setSaveMsg('❌ บันทึกไม่สำเร็จ: ' + (e.message || 'เชื่อมต่อไม่ได้'));
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleModalSave = () => {
+    if (saving) return;
     if (!form.username.trim()) return;
     if (!form.branch.trim()) { alert('กรุณากรอกชื่อสาขา'); return; }
     if (!form.pin) { alert('กรุณากรอกรหัสผ่าน'); return; }
-    setUsers(prev => [...prev, { ...form }]);
-    setShowModal(false);
+    const next = [...users, { ...form, username: form.username.trim(), branch: form.branch.trim() }];
+    setUsers(next);
     markDirty();
+    setShowModal(false);
+    persist(next); // บันทึกลงชีตทันที ไม่ต้องกด "บันทึกทั้งหมด" ซ้ำ
   };
 
-  const handleSave = async () => {
-    setSaving(true); setSaveMsg('');
-    try {
-      const clean = users.map(({ isNew, ...u }) => u);
-      await fetch(GAS_URL, {
-        method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'saveUsers', users: clean }),
-      });
-      const raw = localStorage.getItem('gas_all_data');
-      if (raw) { const d = JSON.parse(raw); d.users = clean; localStorage.setItem('gas_all_data', JSON.stringify(d)); }
-      localStorage.setItem('cached_users', JSON.stringify(clean));
-      setEditId(null); setSaveMsg('✅ บันทึกสำเร็จ'); setDirty(false);
-      setTimeout(() => setSaveMsg(''), 3000);
-    } catch (e) {
-      setSaveMsg('❌ บันทึกไม่สำเร็จ');
-    }
-    setSaving(false);
-  };
+  const handleSave = () => persist(users);
 
   if (loading) return (
     <div style={{ textAlign: 'center', padding: '4rem', color: 'rgba(255,255,255,0.4)' }}>กำลังโหลด...</div>
@@ -117,7 +186,7 @@ export default function ManageUsers() {
               {saveMsg}
             </span>
           )}
-          <button onClick={handleAddUser} style={{ background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.35)', borderRadius: 10, color: '#f97316', cursor: 'pointer', padding: '0.6rem 1.1rem', fontWeight: 700, fontSize: '0.875rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button onClick={handleAddUser} disabled={saving} style={{ opacity: saving ? 0.5 : 1, background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.35)', borderRadius: 10, color: '#f97316', cursor: 'pointer', padding: '0.6rem 1.1rem', fontWeight: 700, fontSize: '0.875rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Plus size={18} /> เพิ่มพนักงาน
           </button>
           <button onClick={handleSave} disabled={saving || !dirty} style={{ background: dirty ? '#16a34a' : 'rgba(255,255,255,0.05)', border: `1px solid ${dirty ? 'rgba(34,197,94,0.5)' : 'rgba(255,255,255,0.1)'}`, borderRadius: 10, color: dirty ? 'white' : 'rgba(255,255,255,0.3)', cursor: saving || !dirty ? 'not-allowed' : 'pointer', padding: '0.6rem 1.1rem', fontWeight: 700, fontSize: '0.875rem', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '0.5rem', transition: 'all 0.2s' }}>
@@ -323,7 +392,7 @@ export default function ManageUsers() {
 
             <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
               <button onClick={() => setShowModal(false)} style={{ flex: 1, padding: '0.8rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: 'white', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600 }}>ยกเลิก</button>
-              <button onClick={handleModalSave} disabled={!form.username.trim() || !form.branch.trim() || !form.pin} style={{ flex: 2, padding: '0.8rem', background: form.username.trim() && form.branch.trim() && form.pin ? '#ea580c' : '#444', border: 'none', color: 'white', borderRadius: 10, cursor: form.username.trim() && form.branch.trim() && form.pin ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontWeight: 700, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+              <button onClick={handleModalSave} disabled={saving || !form.username.trim() || !form.branch.trim() || !form.pin} style={{ flex: 2, padding: '0.8rem', background: form.username.trim() && form.branch.trim() && form.pin ? '#ea580c' : '#444', border: 'none', color: 'white', borderRadius: 10, cursor: form.username.trim() && form.branch.trim() && form.pin ? 'pointer' : 'not-allowed', fontFamily: 'inherit', fontWeight: 700, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                 <Plus size={18} /> เพิ่มพนักงาน
               </button>
             </div>
