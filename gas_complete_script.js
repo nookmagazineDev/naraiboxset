@@ -596,13 +596,13 @@ function doPost(e) {
   }
 
   if (action === 'saveUsers') {
-    var sheet = ss.getSheetByName('Users');
+    var sheet = getOrCreateSheet(ss, 'Users', ['id', 'username', 'pin', 'canCheckout', 'isAdmin', 'isCashier', 'branch']);
     sheet.clearContents();
     sheet.appendRow(['id', 'username', 'pin', 'canCheckout', 'isAdmin', 'isCashier', 'branch']);
     (postData.users || []).forEach(function(u) {
       sheet.appendRow([u.id||Date.now().toString(), u.username||'', u.pin||'', u.canCheckout!==false, (u.isAdmin===true || u.isAdmin==='TRUE'), (u.isCashier===true || u.isCashier==='TRUE'), u.branch||'']);
     });
-    return _bomJson({ success: true });
+    return _bomJson({ success: true, saved: (postData.users || []).length });
   }
 
   if (action === 'resetAllSheetData') {
