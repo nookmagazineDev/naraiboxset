@@ -44,6 +44,7 @@ const CheckoutModal = ({
   const [slipPreview, setSlipPreview] = useState('');
   const [slipUploading, setSlipUploading] = useState(false);
   const [pendingComplete, setPendingComplete] = useState(null); // { method, details }
+  const [completing, setCompleting] = useState(false); // กดเสร็จสิ้นแล้ว — กันแตะเบิ้ลบันทึกบิลซ้ำ
   const billNo = String(orderNumber || '').replace(/[^0-9A-Za-z]/g, '') || ('bill-' + Date.now());
 
   // อ่านไฟล์ภาพ + ย่อขนาดเป็น JPEG (กันไฟล์ใหญ่)
@@ -228,6 +229,8 @@ const CheckoutModal = ({
   };
 
   const finalizeComplete = () => {
+    if (completing) return;
+    setCompleting(true);
     const pc = pendingComplete || { method: 'เงินสด' };
     onComplete(grand, pc.method, pc.details);
   };
@@ -920,8 +923,9 @@ const CheckoutModal = ({
               </button>
               <button
                 onClick={finalizeComplete}
+                disabled={completing}
                 className="confirm-btn"
-                style={{ flex: 1.4, background: '#22c55e' }}
+                style={{ flex: 1.4, background: '#22c55e', opacity: completing ? 0.6 : 1, cursor: completing ? 'not-allowed' : 'pointer' }}
               >
                 <CheckCircle size={18} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '6px' }} />
                 {lang === 'th' ? 'เสร็จสิ้น' : 'Done'}
