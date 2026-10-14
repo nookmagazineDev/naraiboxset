@@ -214,7 +214,8 @@ function App() {
     if (!Array.isArray(pending) || pending.length === 0) return;
 
     flushingRef.current = true;
-    const stillPending = [];
+    const sentEntries = new Set();
+    const failed = [];
     for (const entry of pending) {
       try {
         const res = await fetch(GAS_URL, {
@@ -224,14 +225,21 @@ function App() {
         });
         const json = await res.json().catch(() => null);
         if (!json || json.success !== true) throw new Error('retry failed');
+        sentEntries.add(entry);
       } catch {
-        stillPending.push(entry); // ยังส่งไม่ได้ เก็บไว้รอบหน้า
+        failed.push(entry); // ยังส่งไม่ได้ เก็บไว้รอบหน้า
       }
     }
+    // อ่าน localStorage ใหม่ตอนเขียนกลับ — กันบิลที่เพิ่งล้มเหลวระหว่าง retry ถูกเขียนทับหาย
+    const sentKeys = new Set([...sentEntries].map(e => e.payload?.clientOrderId || JSON.stringify(e.payload)));
+    let latest;
+    try { latest = JSON.parse(localStorage.getItem('pending_orders') || '[]'); } catch { latest = []; }
+    const stillPending = (Array.isArray(latest) ? latest : [])
+      .filter(e => !sentKeys.has(e.payload?.clientOrderId || JSON.stringify(e.payload)));
     localStorage.setItem('pending_orders', JSON.stringify(stillPending));
     flushingRef.current = false;
 
-    const sent = pending.length - stillPending.length;
+    const sent = sentEntries.size;
     if (sent > 0) {
       if (stillPending.length === 0) {
         setSaveAlert({ type: 'success', msg: `✅ ส่งบิลที่ค้าง ${sent} รายการขึ้นระบบสำเร็จแล้ว` });
@@ -696,7 +704,19 @@ function App() {
   // =============================================
   // NEW: Complete payment - save to Orders, clear TableOrders
   // =============================================
+  // กันกด "เสร็จสิ้น" ซ้ำ (แตะเบิ้ล) ระหว่างที่บิลยังปิดไม่เสร็จ
+  const checkoutBusyRef = React.useRef(false);
   const handleCheckoutComplete = async (grandTotal, paymentMethod, paymentDetails) => {
+    if (checkoutBusyRef.current) return;
+    checkoutBusyRef.current = true;
+    try {
+      await doCheckoutComplete(grandTotal, paymentMethod, paymentDetails);
+    } finally {
+      checkoutBusyRef.current = false;
+    }
+  };
+
+  const doCheckoutComplete = async (grandTotal, paymentMethod, paymentDetails) => {
     const finalTotal = grandTotal || checkoutTotal;
 
     // Update shift sales accumulator
@@ -725,7 +745,7 @@ function App() {
     });
     const nextNum = (branchMaxMap[branch] || 0) + 1;
     setBranchMaxMap(prev => ({ ...prev, [branch]: nextNum }));
-    const newOrderNumber = `${branchPrefix(branch)}-#${String(nextNum).padStart(3, '0')}`;
+    let newOrderNumber = `${branchPrefix(branch)}-#${String(nextNum).padStart(3, '0')}`;
     const timestamp = getThaiTimeISO();
 
     const count = localStorage.getItem('customer_count_' + tableNumber) || '';
@@ -775,8 +795,13 @@ function App() {
     // Save to Orders sheet + payment record ในคำขอเดียว (atomic) — กันบิลขึ้นแต่ payment หาย
     // ใช้ fetch แบบอ่าน response ได้ (ไม่ใช้ no-cors) เพื่อ "ตรวจจับ" ว่าบันทึกสำเร็จจริงหรือไม่
     // GAS /exec ตอบ 302 → 200 พร้อม Access-Control-Allow-Origin:* จึงอ่านผลข้าม origin ได้ปลอดภัย
+    // รหัสเฉพาะของบิลนี้ — backend ใช้กันบันทึกซ้ำเมื่อแอปส่งบิลเดิมอีกรอบ (retry)
+    const clientOrderId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     const orderPayload = {
       action: 'insertOrder',
+      clientOrderId,
       rows: rowsToSend,
       payment: {
         orderNumber: newOrderNumber,
@@ -797,6 +822,18 @@ function App() {
       const json = await res.json().catch(() => null);
       if (!json || json.success !== true) {
         throw new Error(json && json.error ? json.error : 'backend ไม่ตอบ success');
+      }
+      // backend อาจออกเลขบิลใหม่ถ้าเลขที่เสนอไปชนกับบิลอื่น (เช่น 2 เครื่องในสาขาเดียวกัน)
+      if (json.orderNumber && json.orderNumber !== newOrderNumber) {
+        const assigned = String(json.orderNumber);
+        newOrderNumber = assigned;
+        const assignedNum = parseInt(assigned.slice(assigned.lastIndexOf('#') + 1), 10);
+        if (!isNaN(assignedNum)) setBranchMaxMap(prev => ({ ...prev, [branch]: Math.max(prev[branch] || 0, assignedNum) }));
+        setOrders(prev => prev.map(o => (o === newOrder ? { ...o, id: assigned, orderNumber: assigned } : o)));
+        newOrder.id = assigned;
+        newOrder.orderNumber = assigned;
+        setSaveAlert({ type: 'success', msg: `ℹ️ เลขบิลซ้ำกับเครื่องอื่น ระบบเปลี่ยนเป็น ${assigned} ให้อัตโนมัติ` });
+        setTimeout(() => setSaveAlert(cur => (cur && cur.type === 'success' ? null : cur)), 8000);
       }
     } catch (error) {
       console.error('Error saving order:', error);

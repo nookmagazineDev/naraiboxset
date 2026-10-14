@@ -337,18 +337,16 @@ function doPost(e) {
 
   // ── ORDER ACTIONS ──
   if (action === 'insertOrder') {
-    var sheet = ss.getSheetByName('Orders');
-    if (postData.rows && Array.isArray(postData.rows)) {
-      postData.rows.forEach(function(row) { sheet.appendRow(row); });
+    // ล็อกกันคำขอบันทึกบิลเข้ามาพร้อมกัน (หลายเครื่อง/ส่งซ้ำ) — ทำให้เช็คซ้ำ + ออกเลขบิลได้ถูกต้อง
+    var lock = LockService.getScriptLock();
+    try { lock.waitLock(30000); } catch (lockErr) {
+      return _bomJson({ success: false, error: 'ระบบไม่ว่าง กรุณาลองใหม่' });
     }
-    // บันทึกข้อมูลการชำระเงินในคำขอเดียวกัน (atomic) — กันกรณีบิลถูกบันทึกแต่ payment หาย
-    if (postData.payment) {
-      var pay = postData.payment;
-      var paySh = getOrCreateSheet(ss, 'PaymentSummary', ['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail']);
-      paySh.getRange(1, 1, 1, 8).setValues([['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail']]);
-      paySh.appendRow([new Date().toISOString(), pay.orderNumber||'', pay.tableNo||'', pay.paymentMethod||'', Number(pay.grandTotal)||0, pay.staff||'', pay.shiftId||'', pay.splitDetail||'']);
+    try {
+      return _bomJson(insertOrderIdempotent_(ss, postData));
+    } finally {
+      lock.releaseLock();
     }
-    return _bomJson({ success: true });
   }
 
   if (action === 'updateStatus') {
@@ -722,6 +720,152 @@ function doPost(e) {
 // ==========================================
 
 // Helper: ส่ง JSON response
+// ──────────────────────────────────────────────
+// บันทึกบิลแบบกันซ้ำ (idempotent) — เรียกภายใต้ LockService เท่านั้น
+// 1) ถ้า clientOrderId นี้เคยบันทึกแล้ว (แอปส่งซ้ำเพราะไม่ได้รับคำตอบ) → ตอบ success โดยไม่บันทึกซ้ำ
+// 2) ถ้าเลขบิลที่แอปเสนอมาชนกับบิลอื่นที่มีอยู่แล้ว (2 เครื่องสาขาเดียวกัน) → ออกเลขใหม่ = เลขสูงสุดของสาขา + 1
+// ──────────────────────────────────────────────
+var PAYMENT_HEADERS = ['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail','clientOrderId'];
+
+function insertOrderIdempotent_(ss, postData) {
+  var sheet = ss.getSheetByName('Orders');
+  var rows  = (postData.rows && Array.isArray(postData.rows)) ? postData.rows : [];
+  var pay   = postData.payment || null;
+  var clientOrderId = String(postData.clientOrderId || (pay && pay.clientOrderId) || '');
+  var proposed = String((pay && pay.orderNumber) || (rows[0] && rows[0][1]) || '');
+
+  var paySh = getOrCreateSheet(ss, 'PaymentSummary', PAYMENT_HEADERS);
+  paySh.getRange(1, 1, 1, PAYMENT_HEADERS.length).setValues([PAYMENT_HEADERS]);
+
+  // ── 1) เช็คว่าบิลนี้เคยบันทึกแล้วหรือยัง ──
+  var payLast = paySh.getLastRow();
+  if (payLast > 1) {
+    var payVals = paySh.getRange(2, 1, payLast - 1, PAYMENT_HEADERS.length).getValues();
+    for (var i = 0; i < payVals.length; i++) {
+      var pr = payVals[i];
+      if (clientOrderId) {
+        if (String(pr[8]) === clientOrderId) return { success: true, duplicate: true, orderNumber: String(pr[1]) };
+      } else if (pay && String(pr[1]) === proposed && String(pr[2]) === String(pay.tableNo || '') &&
+                 Number(pr[4]) === (Number(pay.grandTotal) || 0) && String(pr[3]) === String(pay.paymentMethod || '')) {
+        // บิลค้างรุ่นเก่าที่ยังไม่มี clientOrderId — เทียบเลขบิล + โต๊ะ + ยอด + วิธีจ่าย
+        return { success: true, duplicate: true, orderNumber: proposed };
+      }
+    }
+  }
+
+  // ── 2) กันเลขบิลชน ──
+  var orderNumber = proposed;
+  var lastRow = sheet.getLastRow();
+  if (orderNumber && lastRow > 1) {
+    var nums = sheet.getRange(2, 2, lastRow - 1, 1).getValues();
+    var hashAt = orderNumber.lastIndexOf('#');
+    var prefix = hashAt >= 0 ? orderNumber.substring(0, hashAt + 1) : '';
+    var taken = false, maxNum = 0;
+    for (var j = 0; j < nums.length; j++) {
+      var n = String(nums[j][0]);
+      if (n === orderNumber) taken = true;
+      if (prefix && n.indexOf(prefix) === 0) {
+        var v = parseInt(n.substring(prefix.length), 10);
+        if (!isNaN(v) && v > maxNum) maxNum = v;
+      }
+    }
+    if (taken && prefix) {
+      orderNumber = prefix + ('00' + (maxNum + 1)).slice(-Math.max(3, String(maxNum + 1).length));
+    }
+  }
+
+  // ── 3) บันทึกรายการทั้งบิลในครั้งเดียว (setValues) แทน appendRow ทีละแถว ──
+  if (rows.length > 0) {
+    var width = 0;
+    rows.forEach(function(r) { if (r.length > width) width = r.length; });
+    var out = rows.map(function(r) {
+      var row = r.slice();
+      row[1] = orderNumber;
+      while (row.length < width) row.push('');
+      return row;
+    });
+    sheet.getRange(sheet.getLastRow() + 1, 1, out.length, width).setValues(out);
+  }
+  if (pay) {
+    paySh.appendRow([new Date().toISOString(), orderNumber, pay.tableNo||'', pay.paymentMethod||'', Number(pay.grandTotal)||0, pay.staff||'', pay.shiftId||'', pay.splitDetail||'', clientOrderId]);
+  }
+  return { success: true, orderNumber: orderNumber, renumbered: orderNumber !== proposed };
+}
+
+// ──────────────────────────────────────────────
+// เคลียร์บิลซ้ำที่เกิดขึ้นไปแล้ว (รันเองใน Apps Script Editor)
+//   previewDuplicateOrders() → แค่แสดงรายการที่จะลบใน Log (ไม่แก้ชีต)
+//   removeDuplicateOrders()  → สำรองชีต Orders/PaymentSummary ก่อน แล้วลบแถวซ้ำ
+// Orders: บิลที่รายการทั้งชุดถูกบันทึกซ้ำ k รอบ (เหมือนกันทุกช่อง) → เก็บไว้ชุดเดียว
+// PaymentSummary: แถวเลขบิล + โต๊ะ + วิธีจ่าย + ยอด + รายละเอียดแยกจ่ายซ้ำกัน → เก็บแถวแรก
+// บิลที่เลขชนกันแต่รายการต่างกัน (คนละบิล) จะไม่ลบ แค่แจ้งใน Log ให้ตรวจเอง
+// ──────────────────────────────────────────────
+function previewDuplicateOrders() { return dedupeSales_(false); }
+function removeDuplicateOrders()  { return dedupeSales_(true); }
+
+function dedupeSales_(apply) {
+  var ss = SpreadsheetApp.openById(SHEET_ID);
+  var orders = ss.getSheetByName('Orders');
+  var paySh  = ss.getSheetByName('PaymentSummary');
+  var stamp  = Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyyMMdd-HHmm');
+  var keyOf  = function(row) { return JSON.stringify(row.map(function(c) { return c instanceof Date ? c.toISOString() : String(c); })); };
+
+  // ── PaymentSummary ──
+  var payRowsToDelete = [], payCount = {};
+  if (paySh) {
+    var pVals = paySh.getDataRange().getValues();
+    var seen = {};
+    for (var q = 1; q < pVals.length; q++) { var qn = String(pVals[q][1] || ''); if (qn) payCount[qn] = (payCount[qn] || 0) + 1; }
+    for (var p = 1; p < pVals.length; p++) {
+      var pk = keyOf([pVals[p][1], pVals[p][2], pVals[p][3], pVals[p][4], pVals[p][7]]);
+      if (!String(pVals[p][1])) continue;
+      if (seen[pk]) { payRowsToDelete.push(p + 1); Logger.log('PaymentSummary: แถว ' + (p + 1) + ' ซ้ำ (บิล ' + pVals[p][1] + ')'); }
+      else seen[pk] = true;
+    }
+  }
+
+  // ── Orders ──
+  var oVals = orders.getDataRange().getValues();
+  var byOrder = {};
+  for (var i = 1; i < oVals.length; i++) {
+    var num = String(oVals[i][1] || '');
+    if (!num) continue;
+    (byOrder[num] = byOrder[num] || []).push(i);
+  }
+  var orderRowsToDelete = [], suspicious = [];
+  Object.keys(byOrder).forEach(function(num) {
+    var idx = byOrder[num];
+    var keys = idx.map(function(r) { return keyOf(oVals[r]); });
+    // หา k มากสุดที่ทำให้รายการ = บล็อกเดียวกันซ้ำ k รอบ
+    // จำกัด k ไม่เกินจำนวนแถวชำระเงินของบิลนั้น — บิลจริงที่สั่งเมนูเดียวกัน 2 บรรทัดจะไม่ถูกมองว่าซ้ำ
+    for (var k = Math.min(keys.length, payCount[num] || 1); k >= 2; k--) {
+      if (keys.length % k !== 0) continue;
+      var size = keys.length / k, ok = true;
+      for (var t = size; t < keys.length && ok; t++) if (keys[t] !== keys[t % size]) ok = false;
+      if (ok) {
+        Logger.log('Orders: บิล ' + num + ' ซ้ำ ' + k + ' รอบ (ลบ ' + (keys.length - size) + ' แถว)');
+        for (var d = size; d < idx.length; d++) orderRowsToDelete.push(idx[d] + 1);
+        return;
+      }
+    }
+    // ไม่ใช่บล็อกซ้ำ แต่มีหลาย timestamp → น่าจะเป็นเลขบิลชน (คนละบิล)
+    var ts = {};
+    idx.forEach(function(r) { ts[keyOf([oVals[r][0]])] = true; });
+    if (Object.keys(ts).length > 1) suspicious.push(num);
+  });
+
+  if (suspicious.length) Logger.log('⚠️ เลขบิลที่อาจชนกัน (คนละบิล ไม่ได้ลบ ตรวจเอง): ' + suspicious.join(', '));
+  Logger.log('สรุป: Orders ลบ ' + orderRowsToDelete.length + ' แถว, PaymentSummary ลบ ' + payRowsToDelete.length + ' แถว' + (apply ? '' : ' (preview — ยังไม่ได้ลบ)'));
+
+  if (apply && (orderRowsToDelete.length || payRowsToDelete.length)) {
+    orders.copyTo(ss).setName('Orders_backup_' + stamp);
+    if (paySh) paySh.copyTo(ss).setName('PaymentSummary_backup_' + stamp);
+    orderRowsToDelete.sort(function(a, b) { return b - a; }).forEach(function(r) { orders.deleteRow(r); });
+    payRowsToDelete.sort(function(a, b) { return b - a; }).forEach(function(r) { paySh.deleteRow(r); });
+  }
+  return { orders: orderRowsToDelete.length, payments: payRowsToDelete.length, suspicious: suspicious };
+}
+
 function _bomJson(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
