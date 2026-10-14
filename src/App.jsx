@@ -215,6 +215,7 @@ function App() {
 
     flushingRef.current = true;
     const sentEntries = new Set();
+    const closedEntries = new Set(); // โต๊ะถูกปิดบิลไปแล้วจากรอบอื่น — ทิ้งได้ ไม่ต้องส่งซ้ำ
     const failed = [];
     for (const entry of pending) {
       try {
@@ -224,6 +225,7 @@ function App() {
           body: JSON.stringify(entry.payload)
         });
         const json = await res.json().catch(() => null);
+        if (json && json.alreadyClosed) { closedEntries.add(entry); sentEntries.add(entry); continue; }
         if (!json || json.success !== true) throw new Error('retry failed');
         sentEntries.add(entry);
       } catch {
@@ -239,7 +241,11 @@ function App() {
     localStorage.setItem('pending_orders', JSON.stringify(stillPending));
     flushingRef.current = false;
 
-    const sent = sentEntries.size;
+    const sent = sentEntries.size - closedEntries.size;
+    if (closedEntries.size > 0) {
+      const nums = [...closedEntries].map(e => e.payload?.payment?.orderNumber).filter(Boolean).join(', ');
+      setSaveAlert({ type: 'error', msg: `⚠️ บิลค้าง ${nums} ไม่ได้บันทึก เพราะโต๊ะนั้นถูกปิดบิลไปแล้ว (กันยอดซ้ำ) — ถ้ายอดไม่ตรง กรุณาตรวจสอบ` });
+    }
     if (sent > 0) {
       if (stillPending.length === 0) {
         setSaveAlert({ type: 'success', msg: `✅ ส่งบิลที่ค้าง ${sent} รายการขึ้นระบบสำเร็จแล้ว` });
@@ -720,29 +726,31 @@ function App() {
     const finalTotal = grandTotal || checkoutTotal;
 
     // Update shift sales accumulator
-    setShiftSales(prev => {
-      let addCash, addTransfer, addCard;
-      if (paymentDetails) {
-        // แยกจ่าย — กระจายตามจำนวนเงินที่ระบุแต่ละประเภท
-        addCash     = Number(paymentDetails.cash)     || 0;
-        addTransfer = Number(paymentDetails.transfer) || 0;
-        addCard     = Number(paymentDetails.card)     || 0;
-      } else {
-        const m = (paymentMethod || '').toLowerCase();
-        addCash     = (m.includes('สด') || m === 'cash') ? finalTotal : 0;
-        addTransfer = (m.includes('โอน') || m.includes('qr')) ? finalTotal : 0;
-        addCard     = (m.includes('บัตร') || m === 'card') ? finalTotal : 0;
-      }
+    let addCash, addTransfer, addCard;
+    if (paymentDetails) {
+      // แยกจ่าย — กระจายตามจำนวนเงินที่ระบุแต่ละประเภท
+      addCash     = Number(paymentDetails.cash)     || 0;
+      addTransfer = Number(paymentDetails.transfer) || 0;
+      addCard     = Number(paymentDetails.card)     || 0;
+    } else {
+      const m = (paymentMethod || '').toLowerCase();
+      addCash     = (m.includes('สด') || m === 'cash') ? finalTotal : 0;
+      addTransfer = (m.includes('โอน') || m.includes('qr')) ? finalTotal : 0;
+      addCard     = (m.includes('บัตร') || m === 'card') ? finalTotal : 0;
+    }
+    // sign = 1 บวกยอดเข้ากะ, -1 ถอนออก (กรณี backend แจ้งว่าโต๊ะถูกปิดบิลไปแล้ว)
+    const applyShiftSales = (sign) => setShiftSales(prev => {
       const updated = {
-        totalSales:    (prev.totalSales    || 0) + finalTotal,
-        totalOrders:   (prev.totalOrders   || 0) + 1,
-        totalCash:     (prev.totalCash     || 0) + addCash,
-        totalTransfer: (prev.totalTransfer || 0) + addTransfer,
-        totalCard:     (prev.totalCard     || 0) + addCard,
+        totalSales:    (prev.totalSales    || 0) + sign * finalTotal,
+        totalOrders:   (prev.totalOrders   || 0) + sign,
+        totalCash:     (prev.totalCash     || 0) + sign * addCash,
+        totalTransfer: (prev.totalTransfer || 0) + sign * addTransfer,
+        totalCard:     (prev.totalCard     || 0) + sign * addCard,
       };
       localStorage.setItem('shift_sales', JSON.stringify(updated));
       return updated;
     });
+    applyShiftSales(1);
     const nextNum = (branchMaxMap[branch] || 0) + 1;
     setBranchMaxMap(prev => ({ ...prev, [branch]: nextNum }));
     let newOrderNumber = `${branchPrefix(branch)}-#${String(nextNum).padStart(3, '0')}`;
@@ -799,9 +807,21 @@ function App() {
     const clientOrderId = (typeof crypto !== 'undefined' && crypto.randomUUID)
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    // ส่งรายการที่ต้องตัดสต็อก + รอบสั่ง (SessionId) ของโต๊ะไปพร้อมบิล — backend บันทึกบิล, ล้างโต๊ะ,
+    // ตัดสต็อกในคำขอเดียว และปฏิเสธถ้าโต๊ะนี้ถูกปิดบิลไปแล้ว (กันปิดบิลโต๊ะเดิมซ้ำ)
+    const deductItems = checkoutItems
+      .map(item => {
+        const menuItem = allMenu.find(m => m.name === item.ItemName || m.nameEn === item.ItemNameEn);
+        return menuItem ? { menuId: String(menuItem.id), menuName: item.ItemName, qty: Number(item.Quantity) || 1 } : null;
+      })
+      .filter(Boolean);
+    const sessionIds = [...new Set(checkoutItems.map(i => String(i.SessionId ?? '')).filter(Boolean))];
     const orderPayload = {
       action: 'insertOrder',
       clientOrderId,
+      tableNumber: String(tableNumber),
+      sessionIds,
+      deductItems,
       rows: rowsToSend,
       payment: {
         orderNumber: newOrderNumber,
@@ -813,6 +833,9 @@ function App() {
         splitDetail: paymentDetails ? JSON.stringify(paymentDetails) : ''
       }
     };
+    let tableHandled = false; // GAS รุ่นใหม่ล้างโต๊ะให้ในคำขอเดียวแล้ว
+    let stockHandled = false; // GAS รุ่นใหม่ตัดสต็อกให้ในคำขอเดียวแล้ว
+    let saved = false;
     try {
       const res = await fetch(GAS_URL, {
         method: 'POST',
@@ -820,9 +843,18 @@ function App() {
         body: JSON.stringify(orderPayload)
       });
       const json = await res.json().catch(() => null);
+      if (json && json.alreadyClosed) {
+        // อีกเครื่อง/รอบก่อนปิดบิลโต๊ะนี้ไปแล้ว — ไม่บันทึกซ้ำ ถอนยอดที่บวกไว้ล่วงหน้าออก
+        applyShiftSales(-1);
+        setOrders(prev => prev.filter(o => o !== newOrder));
+        setSaveAlert({ type: 'error', msg: `⚠️ โต๊ะ ${tableNumber} ถูกปิดบิลไปแล้ว — ไม่ได้บันทึกบิลซ้ำ (ถ้ารับเงินลูกค้ารอบนี้ไปแล้ว กรุณาคืนเงิน/ตรวจสอบ)` });
+        return;
+      }
       if (!json || json.success !== true) {
         throw new Error(json && json.error ? json.error : 'backend ไม่ตอบ success');
       }
+      tableHandled = !!json.tableCleared;
+      stockHandled = !!json.stockHandled;
       // backend อาจออกเลขบิลใหม่ถ้าเลขที่เสนอไปชนกับบิลอื่น (เช่น 2 เครื่องในสาขาเดียวกัน)
       if (json.orderNumber && json.orderNumber !== newOrderNumber) {
         const assigned = String(json.orderNumber);
@@ -835,6 +867,7 @@ function App() {
         setSaveAlert({ type: 'success', msg: `ℹ️ เลขบิลซ้ำกับเครื่องอื่น ระบบเปลี่ยนเป็น ${assigned} ให้อัตโนมัติ` });
         setTimeout(() => setSaveAlert(cur => (cur && cur.type === 'success' ? null : cur)), 8000);
       }
+      saved = true;
     } catch (error) {
       console.error('Error saving order:', error);
       // เก็บบิลที่บันทึกไม่สำเร็จไว้ในเครื่อง เพื่อไม่ให้ข้อมูลหาย + ให้ retry/ตรวจสอบภายหลังได้
@@ -846,36 +879,33 @@ function App() {
       setSaveAlert({ type: 'error', msg: `⚠️ บันทึกบิล ${newOrderNumber} (${paymentMethod}) ขึ้นระบบไม่สำเร็จ! ข้อมูลถูกสำรองไว้ในเครื่องแล้ว — จะลองส่งซ้ำอัตโนมัติเมื่อเน็ตกลับมา` });
     }
 
-    try {
-      // Clear TableOrders for this table
-      await fetch(GAS_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'clearTableOrders', tableNumber: String(tableNumber) })
-      });
-    } catch (error) {
-      console.error('Error clearing table orders:', error);
-    }
-
-    try {
-      // Deduct stock based on BOM
-      const deductItems = checkoutItems
-        .map(item => {
-          const menuItem = allMenu.find(m => m.name === item.ItemName || m.nameEn === item.ItemNameEn);
-          return menuItem ? { menuId: String(menuItem.id), menuName: item.ItemName, qty: Number(item.Quantity) || 1 } : null;
-        })
-        .filter(Boolean);
-      if (deductItems.length > 0) {
+    // GAS รุ่นเก่า (ยังไม่ deploy ใหม่) ไม่ได้ล้างโต๊ะ/ตัดสต็อกให้ — ยิงแยกแบบเดิมเฉพาะเมื่อบันทึกบิลสำเร็จ
+    // (ถ้าบันทึกไม่สำเร็จ บิลค้างจะ retry ภายหลังและ backend รุ่นใหม่จะจัดการให้ในคำขอเดียว)
+    if (saved && !tableHandled) {
+      try {
         await fetch(GAS_URL, {
           method: 'POST',
           mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'deductStock', orderNumber: newOrderNumber, tableNo: String(tableNumber), items: deductItems })
+          body: JSON.stringify({ action: 'clearTableOrders', tableNumber: String(tableNumber) })
         });
+      } catch (error) {
+        console.error('Error clearing table orders:', error);
       }
-    } catch (error) {
-      console.error('Error deducting stock:', error);
+    }
+    if (saved && !stockHandled) {
+      try {
+        if (deductItems.length > 0) {
+          await fetch(GAS_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ action: 'deductStock', orderNumber: newOrderNumber, tableNo: String(tableNumber), items: deductItems })
+          });
+        }
+      } catch (error) {
+        console.error('Error deducting stock:', error);
+      }
     }
 
     try {

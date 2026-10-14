@@ -724,6 +724,8 @@ function doPost(e) {
 // บันทึกบิลแบบกันซ้ำ (idempotent) — เรียกภายใต้ LockService เท่านั้น
 // 1) ถ้า clientOrderId นี้เคยบันทึกแล้ว (แอปส่งซ้ำเพราะไม่ได้รับคำตอบ) → ตอบ success โดยไม่บันทึกซ้ำ
 // 2) ถ้าเลขบิลที่แอปเสนอมาชนกับบิลอื่นที่มีอยู่แล้ว (2 เครื่องสาขาเดียวกัน) → ออกเลขใหม่ = เลขสูงสุดของสาขา + 1
+// 3) ถ้ารายการโต๊ะ (sessionIds) ที่จะปิดไม่เหลือใน TableOrders แล้ว → โต๊ะนี้ถูกปิดบิลไปแล้ว ไม่บันทึกซ้ำ
+// แล้วล้างรายการโต๊ะ + ตัดสต็อกในคำขอเดียวกัน (ภายใต้ lock เดียวกัน)
 // ──────────────────────────────────────────────
 var PAYMENT_HEADERS = ['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail','clientOrderId'];
 
@@ -744,12 +746,29 @@ function insertOrderIdempotent_(ss, postData) {
     for (var i = 0; i < payVals.length; i++) {
       var pr = payVals[i];
       if (clientOrderId) {
-        if (String(pr[8]) === clientOrderId) return { success: true, duplicate: true, orderNumber: String(pr[1]) };
+        if (String(pr[8]) === clientOrderId) return { success: true, duplicate: true, orderNumber: String(pr[1]), tableCleared: true, stockHandled: true };
       } else if (pay && String(pr[1]) === proposed && String(pr[2]) === String(pay.tableNo || '') &&
                  Number(pr[4]) === (Number(pay.grandTotal) || 0) && String(pr[3]) === String(pay.paymentMethod || '')) {
         // บิลค้างรุ่นเก่าที่ยังไม่มี clientOrderId — เทียบเลขบิล + โต๊ะ + ยอด + วิธีจ่าย
         return { success: true, duplicate: true, orderNumber: proposed };
       }
+    }
+  }
+
+  // ── 1.5) กันปิดบิลโต๊ะเดิมซ้ำ — รายการโต๊ะ (SessionId) ที่จะปิดต้องยังค้างอยู่ใน TableOrders ──
+  var tableNo    = String(postData.tableNumber || '');
+  var sessionIds = Array.isArray(postData.sessionIds) ? postData.sessionIds.map(String).filter(String) : [];
+  var tSheet = ss.getSheetByName('TableOrders');
+  var tableRowsToClear = [];
+  if (tableNo && sessionIds.length > 0 && tSheet) {
+    var sessSet = {};
+    sessionIds.forEach(function(id) { sessSet[id] = true; });
+    var tVals = tSheet.getDataRange().getValues();
+    for (var ti = 1; ti < tVals.length; ti++) {
+      if (String(tVals[ti][0]) === tableNo && sessSet[String(tVals[ti][1])] && tVals[ti][8] !== 'paid') tableRowsToClear.push(ti + 1);
+    }
+    if (tableRowsToClear.length === 0) {
+      return { success: false, alreadyClosed: true, error: 'โต๊ะ ' + tableNo + ' ถูกปิดบิลไปแล้ว' };
     }
   }
 
@@ -789,7 +808,23 @@ function insertOrderIdempotent_(ss, postData) {
   if (pay) {
     paySh.appendRow([new Date().toISOString(), orderNumber, pay.tableNo||'', pay.paymentMethod||'', Number(pay.grandTotal)||0, pay.staff||'', pay.shiftId||'', pay.splitDetail||'', clientOrderId]);
   }
-  return { success: true, orderNumber: orderNumber, renumbered: orderNumber !== proposed };
+
+  // ── 4) ล้างรายการโต๊ะที่ปิดบิลแล้ว (เฉพาะรอบสั่งที่อยู่ในบิลนี้) — ทำในคำขอเดียวกับการบันทึกบิล ──
+  tableRowsToClear.sort(function(a, b) { return b - a; }).forEach(function(r) { tSheet.deleteRow(r); });
+
+  // ── 5) ตัดสต็อกตาม BOM — ทำครั้งเดียวต่อบิล (retry ถูกกันซ้ำไว้ที่ขั้น 1 แล้ว) ──
+  var stock = null;
+  if (Array.isArray(postData.deductItems) && postData.deductItems.length > 0) {
+    try {
+      stock = deductStock({ orderNumber: orderNumber, tableNo: (pay && pay.tableNo) || tableNo, items: postData.deductItems });
+    } catch (stockErr) {
+      stock = { success: false, error: String(stockErr) };
+    }
+  }
+
+  // tableCleared/stockHandled บอกแอปว่า backend รุ่นนี้จัดการให้แล้ว ไม่ต้องยิง clearTableOrders/deductStock แยก
+  return { success: true, orderNumber: orderNumber, renumbered: orderNumber !== proposed,
+           tableCleared: sessionIds.length > 0, stockHandled: true, stock: stock };
 }
 
 // ──────────────────────────────────────────────
