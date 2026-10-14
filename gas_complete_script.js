@@ -229,15 +229,27 @@ function doPost(e) {
     var items       = postData.items       || [];
     var timestamp   = postData.timestamp   || new Date().toISOString();
     var recordedBy  = postData.recordedBy  || '';
-    items.forEach(function(item) {
+    var newRows = items.map(function(item) {
       var parts = [];
       if (item.food && item.food.priceName) parts.push(item.food.priceName);
       if (item.spice && item.spice.name) parts.push('ความเผ็ด: ' + item.spice.name);
       if (item.allPopups && item.allPopups.length > 0) item.allPopups.forEach(function(p) { parts.push(p.name); });
       if (item.promo && item.promo.id !== 'none' && item.promo.name) parts.push(item.promo.name);
       if (item.note && String(item.note).trim()) parts.push('📝 ' + String(item.note).trim());
-      sheet.appendRow([tableNumber, sessionId, item.food.name || '', item.food.nameEn || '', Number(item.food.price) || 0, Number(item.quantity) || 1, parts.join(', '), timestamp, 'pending', recordedBy]);
+      return [tableNumber, sessionId, item.food.name || '', item.food.nameEn || '', Number(item.food.price) || 0, Number(item.quantity) || 1, parts.join(', '), timestamp, 'pending', recordedBy];
     });
+    // ใช้ lock เดียวกับ insertOrder — ถ้ารอบสั่งนี้ถูกปิดบิลไปก่อนแล้ว (กดจ่ายเร็วกว่าที่รายการขึ้นชีต)
+    // ไม่ต้องเพิ่มลงโต๊ะ ไม่งั้นจะค้างเป็นโต๊ะผีที่จ่ายแล้ว
+    var addLock = LockService.getScriptLock();
+    try { addLock.waitLock(30000); } catch (lockErr) {
+      return _bomJson({ success: false, error: 'ระบบไม่ว่าง กรุณาลองใหม่' });
+    }
+    try {
+      if (closedSessions_(ss)[String(sessionId)]) return _bomJson({ success: true, sessionId: sessionId, skipped: 'already_paid' });
+      if (newRows.length > 0) sheet.getRange(sheet.getLastRow() + 1, 1, newRows.length, 10).setValues(newRows);
+    } finally {
+      addLock.releaseLock();
+    }
     return _bomJson({ success: true, sessionId: sessionId });
   }
 
@@ -263,7 +275,7 @@ function doPost(e) {
     if (sheetA) {
       var dataA = sheetA.getDataRange().getValues();
       for (var i = dataA.length - 1; i >= 1; i--) {
-        if (dataA[i][8] !== 'paid') sheetA.deleteRow(i + 1);
+        if (dataA[i][8] !== 'paid' && tableRowInBranch_(dataA[i], postData.branch)) sheetA.deleteRow(i + 1);
       }
     }
     return _bomJson({ success: true });
@@ -274,7 +286,7 @@ function doPost(e) {
     var tableNumber = String(postData.tableNumber || '');
     var data = sheet.getDataRange().getValues();
     for (var i = data.length - 1; i >= 1; i--) {
-      if (String(data[i][0]) === tableNumber && data[i][8] !== 'paid') sheet.deleteRow(i + 1);
+      if (String(data[i][0]) === tableNumber && data[i][8] !== 'paid' && tableRowInBranch_(data[i], postData.branch)) sheet.deleteRow(i + 1);
     }
     return _bomJson({ success: true });
   }
@@ -301,7 +313,7 @@ function doPost(e) {
     var data = sheet.getDataRange().getValues();
     var updated = false;
     for (var i = 1; i < data.length; i++) {
-      if (String(data[i][0]) === fromTable && data[i][8] !== 'paid') {
+      if (String(data[i][0]) === fromTable && data[i][8] !== 'paid' && tableRowInBranch_(data[i], postData.branch)) {
         sheet.getRange(i + 1, 1).setValue(toTable);
         updated = true;
       }
@@ -323,7 +335,7 @@ function doPost(e) {
     var data = sheet.getDataRange().getValues();
     var updated = false;
     for (var i = 1; i < data.length; i++) {
-      if (String(data[i][0]) === fromTable && data[i][8] !== 'paid') {
+      if (String(data[i][0]) === fromTable && data[i][8] !== 'paid' && tableRowInBranch_(data[i], postData.branch)) {
         var sig2 = String(data[i][1]) + '|' + String(data[i][2]) + '|' + String(data[i][6]) + '|' + String(Number(data[i][4]) || 0);
         if (need[sig2] > 0) {
           sheet.getRange(i + 1, 1).setValue(toTable);
@@ -727,7 +739,26 @@ function doPost(e) {
 // 3) ถ้ารายการโต๊ะ (sessionIds) ที่จะปิดไม่เหลือใน TableOrders แล้ว → โต๊ะนี้ถูกปิดบิลไปแล้ว ไม่บันทึกซ้ำ
 // แล้วล้างรายการโต๊ะ + ตัดสต็อกในคำขอเดียวกัน (ภายใต้ lock เดียวกัน)
 // ──────────────────────────────────────────────
-var PAYMENT_HEADERS = ['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail','clientOrderId'];
+var PAYMENT_HEADERS = ['timestamp','orderNumber','tableNo','paymentMethod','grandTotal','staff','shiftId','splitDetail','clientOrderId','sessionIds'];
+
+// รอบสั่ง (SessionId) ที่ถูกปิดบิลไปแล้ว — เก็บไว้ในคอลัมน์ sessionIds ของ PaymentSummary
+function closedSessions_(ss) {
+  var set = {};
+  var sh = ss.getSheetByName('PaymentSummary');
+  if (!sh || sh.getLastRow() < 2 || sh.getLastColumn() < 10) return set;
+  sh.getRange(2, 10, sh.getLastRow() - 1, 1).getValues().forEach(function(r) {
+    String(r[0] || '').split(',').forEach(function(id) { if (id) set[id] = true; });
+  });
+  return set;
+}
+
+// แถว TableOrders เป็นของสาขานี้ไหม — ไม่ส่ง branch มา (แอปรุ่นเก่า) = ทุกแถวเหมือนเดิม,
+// แถวเก่าที่ไม่มี RecordedBy ถือว่าเป็นของทุกสาขา
+function tableRowInBranch_(row, branch) {
+  if (!branch) return true;
+  var by = String(row[9] || '').trim();
+  return by === '' || by === String(branch).trim();
+}
 
 function insertOrderIdempotent_(ss, postData) {
   var sheet = ss.getSheetByName('Orders');
@@ -755,23 +786,16 @@ function insertOrderIdempotent_(ss, postData) {
     }
   }
 
-  // ── 1.5) กันปิดบิลโต๊ะเดิมซ้ำ — รายการโต๊ะ (SessionId) ที่จะปิดต้องยังค้างอยู่ใน TableOrders ──
+  // ── 1.5) กันปิดบิลโต๊ะเดิมซ้ำ — ถ้ารอบสั่ง (SessionId) ใดในบิลนี้เคยถูกปิดบิลไปแล้ว → ไม่บันทึกซ้ำ ──
+  // (ไม่เช็คจาก TableOrders เพราะรายการตะกร้าอาจยังเขียนขึ้นชีตไม่ทันตอนกดจ่ายเร็ว ๆ)
   var tableNo    = String(postData.tableNumber || '');
   var sessionIds = Array.isArray(postData.sessionIds) ? postData.sessionIds.map(String).filter(String) : [];
-  var tSheet = ss.getSheetByName('TableOrders');
-  var tableRowsToClear = [];
-  if (tableNo && sessionIds.length > 0 && tSheet) {
-    var sessSet = {};
-    sessionIds.forEach(function(id) { sessSet[id] = true; });
-    var tVals = tSheet.getDataRange().getValues();
-    for (var ti = 1; ti < tVals.length; ti++) {
-      if (String(tVals[ti][0]) === tableNo && sessSet[String(tVals[ti][1])] && tVals[ti][8] !== 'paid') tableRowsToClear.push(ti + 1);
-    }
-    if (tableRowsToClear.length === 0) {
-      return { success: false, alreadyClosed: true, error: 'โต๊ะ ' + tableNo + ' ถูกปิดบิลไปแล้ว' };
+  if (sessionIds.length > 0) {
+    var closed = closedSessions_(ss);
+    for (var ci = 0; ci < sessionIds.length; ci++) {
+      if (closed[sessionIds[ci]]) return { success: false, alreadyClosed: true, error: 'โต๊ะ ' + tableNo + ' ถูกปิดบิลไปแล้ว' };
     }
   }
-
   // ── 2) กันเลขบิลชน ──
   var orderNumber = proposed;
   var lastRow = sheet.getLastRow();
@@ -806,11 +830,20 @@ function insertOrderIdempotent_(ss, postData) {
     sheet.getRange(sheet.getLastRow() + 1, 1, out.length, width).setValues(out);
   }
   if (pay) {
-    paySh.appendRow([new Date().toISOString(), orderNumber, pay.tableNo||'', pay.paymentMethod||'', Number(pay.grandTotal)||0, pay.staff||'', pay.shiftId||'', pay.splitDetail||'', clientOrderId]);
+    paySh.appendRow([new Date().toISOString(), orderNumber, pay.tableNo||'', pay.paymentMethod||'', Number(pay.grandTotal)||0, pay.staff||'', pay.shiftId||'', pay.splitDetail||'', clientOrderId, sessionIds.join(',')]);
   }
 
   // ── 4) ล้างรายการโต๊ะที่ปิดบิลแล้ว (เฉพาะรอบสั่งที่อยู่ในบิลนี้) — ทำในคำขอเดียวกับการบันทึกบิล ──
-  tableRowsToClear.sort(function(a, b) { return b - a; }).forEach(function(r) { tSheet.deleteRow(r); });
+  // อ่านชีตใหม่ตรงนี้ (ไม่ใช้เลขแถวที่อ่านไว้ก่อน) กันแถวเลื่อนจากการลบรายการโต๊ะของเครื่องอื่น
+  var tSheet = ss.getSheetByName('TableOrders');
+  if (sessionIds.length > 0 && tSheet) {
+    var sessSet = {};
+    sessionIds.forEach(function(id) { sessSet[id] = true; });
+    var tVals = tSheet.getDataRange().getValues();
+    for (var ti = tVals.length - 1; ti >= 1; ti--) {
+      if (sessSet[String(tVals[ti][1])] && tVals[ti][8] !== 'paid') tSheet.deleteRow(ti + 1);
+    }
+  }
 
   // ── 5) ตัดสต็อกตาม BOM — ทำครั้งเดียวต่อบิล (retry ถูกกันซ้ำไว้ที่ขั้น 1 แล้ว) ──
   var stock = null;
