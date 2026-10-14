@@ -100,7 +100,7 @@ function App() {
 
   // โต๊ะที่ยังไม่ชำระ (ใช้ตอนปิดกะ → บิลค้าง)
   const getPendingTables = () => {
-    const pending = (tableOrders || []).filter(o => o.Status !== 'paid');
+    const pending = myTableOrders.filter(o => o.Status !== 'paid');
     const map = {};
     pending.forEach(o => {
       const t = String(o.TableNumber);
@@ -142,10 +142,10 @@ function App() {
       // บันทึกขึ้นเซิร์ฟเวอร์ + ล้างโต๊ะทั้งหมด
       try {
         await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'saveOutstandingBills', bills }) });
-        await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'clearAllTableOrders' }) });
+        await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'clearAllTableOrders', branch }) });
       } catch (e) {}
       // เคลียร์โต๊ะในเครื่อง + ลบจำนวนลูกค้า
-      setTableOrders(prev => prev.filter(o => o.Status === 'paid'));
+      setTableOrders(prev => prev.filter(o => o.Status === 'paid' || !inMyBranch(o)));
       pendingTables.forEach(t => localStorage.removeItem('customer_count_' + t.tableNo));
     }
 
@@ -318,6 +318,13 @@ function App() {
 
   // TABLE ORDERS STATE
   const [tableOrders, setTableOrders] = useState([]);
+  // รายการโต๊ะของสาขาตัวเองเท่านั้น — ชีต TableOrders ใช้ร่วมกันทุกสาขา (เลขโต๊ะซ้ำกันได้ เช่นโต๊ะ 1)
+  // แถวเก่าที่ไม่มี RecordedBy แสดงให้ทุกสาขาเหมือนเดิม (ตรงกับ tableRowInBranch_ ฝั่ง GAS)
+  const inMyBranch = React.useCallback(o => {
+    const by = String(o.RecordedBy || '').trim();
+    return !by || !branch || by === branch;
+  }, [branch]);
+  const myTableOrders = React.useMemo(() => (tableOrders || []).filter(inMyBranch), [tableOrders, inMyBranch]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // CHECKOUT (from table view)
@@ -611,7 +618,8 @@ function App() {
   const handleSendOrderToTable = async () => {
     if (cart.length === 0) return;
 
-    const sessionId = String(Date.now());
+    // ต่อท้ายด้วยเลขสุ่ม กันรอบสั่งของ 2 สาขาได้ id เดียวกันเมื่อกดในมิลลิวินาทีเดียวกัน
+    const sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const timestamp = getThaiTimeISO();
 
     // Optimistic update: add to local tableOrders immediately
@@ -887,7 +895,7 @@ function App() {
           method: 'POST',
           mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'clearTableOrders', tableNumber: String(tableNumber) })
+          body: JSON.stringify({ action: 'clearTableOrders', tableNumber: String(tableNumber), branch })
         });
       } catch (error) {
         console.error('Error clearing table orders:', error);
@@ -963,9 +971,10 @@ function App() {
 
     try {
       const body = moveAll
-        ? { action: 'moveTable', fromTable: String(fromTable), toTable: String(toTable) }
+        ? { action: 'moveTable', fromTable: String(fromTable), toTable: String(toTable), branch }
         : {
             action: 'moveTableItems',
+            branch,
             fromTable: String(fromTable),
             toTable: String(toTable),
             keys: items.map(it => ({
@@ -1092,7 +1101,7 @@ function App() {
           !tableNumber ? <Navigate to="/index" replace /> :
             <TableOrderView
               tableNumber={tableNumber}
-              tableOrders={tableOrders}
+              tableOrders={myTableOrders}
               lang={lang}
               currentUser={currentUser}
               settings={posSettings}
